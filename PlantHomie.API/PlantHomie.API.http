@@ -2,4 +2,3 @@
 
 GET {{PlantHomie.API_HostAddress}}/api/plantlog/latest?plantId=1
 Accept: application/json
-

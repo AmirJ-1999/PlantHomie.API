@@ -1,6 +1,8 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using PlantHomie.API.Data;
 
+
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Tilføj Database Context
