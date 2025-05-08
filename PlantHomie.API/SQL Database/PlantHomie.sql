@@ -35,5 +35,5 @@ CREATE TABLE PlantLog (
 
      SELECT * FROM Plant WHERE Plant_ID = 1; -- Tester om der Plant_ID 1 eksisterer
      
-   --  INSERT INTO Plant (Plant_ID, Plant_Name, Plant_type) VALUES (1, 'Example Plant', 'Example Type'); -- Indsætter en ny plante med Plant_ID 1, Plant_Name 'Example Plant' og Plant_type 'Example Type'
+-- Indsætter en ny plante med Plant_ID 1, Plant_Name 'Example Plant' og Plant_type 'Example Type'
      

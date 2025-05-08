@@ -12,24 +12,17 @@ namespace PlantHomie.API.Data
         public DbSet<Notification> Notifications { get; set; }
         public DbSet<PlantLog> PlantLogs { get; set; }
 
-        // Overskriver OnModelCreating-metoden for at konfigurere modelrelationer og tabeller i databasen.  
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-
             base.OnModelCreating(modelBuilder);
 
+            // Map 'User' entiteten til '[User]' tabellen i databasen
+            modelBuilder.Entity<User>().ToTable("User");
 
-
-            // Konfigurerer 'Plant'-entiteten til at matche 'Plant'-tabellen i databasen.
-
+            // Map andre entiteter til deres respektive tabeller
             modelBuilder.Entity<Plant>().ToTable("Plant");
-
-
-
-            // Konfigurerer 'PlantLog'-entiteten til at matche 'PlantLog'-tabellen i databasen.
-
             modelBuilder.Entity<PlantLog>().ToTable("PlantLog");
-
-        }
+            modelBuilder.Entity<Notification>().ToTable("Notification");
+        }
     }
 }

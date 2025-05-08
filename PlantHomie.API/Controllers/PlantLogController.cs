@@ -18,12 +18,11 @@ namespace PlantHomie.API.Controllers
         }
 
         // GET: api/plantlog
-        // Simpel test for browser
         [HttpGet]
         public IActionResult Index()
         {
             var logs = _context.PlantLogs
-                .Include(p => p.Plant) // Inkluder relateret Plant-data
+                .Include(p => p.Plant)
                 .OrderByDescending(p => p.Dato_Tid)
                 .ToList();
 
@@ -48,9 +47,8 @@ namespace PlantHomie.API.Controllers
             _context.PlantLogs.Add(log);
             _context.SaveChanges();
 
-            // Hent loggen igen med relateret Plant-data
             var savedLog = _context.PlantLogs
-                .Include(p => p.Plant) // Inkluder relateret Plant-data
+                .Include(p => p.Plant)
                 .FirstOrDefault(p => p.PlantLog_ID == log.PlantLog_ID);
 
             return Ok(new { message = "Log gemt", log = savedLog });
@@ -69,6 +67,56 @@ namespace PlantHomie.API.Controllers
                 return NotFound("Ingen data fundet for den plante.");
 
             return Ok(latest);
+        }
+
+        // Dette er GET Metoden for at hente den nyeste temperaturmåling fra databasen.
+        // Du siger hvilken plante med "PlantID"
+        [HttpGet("temperature/{plantId}")]
+        public IActionResult GetTemperature(int plantId)
+        {
+            var data = _context.PlantLogs
+                .Where(p => p.Plant_ID == plantId)
+                .OrderByDescending(p => p.Dato_Tid)
+                .FirstOrDefault();
+
+            // Hvis der ikke er en måling, så returner en fejlbesked
+            // hvor der står "ingen temperaturdata fundet"
+            return data != null
+                ? Ok(data.Temperaturelevel)
+                : NotFound("Ingen temperaturdata fundet");
+        }
+
+
+        // Dette er GET Metoden for at hente den nyeste luftfugtighedsmåling fra databasen.
+        // Du siger hvilken plante med "PlantID"
+        [HttpGet("airhumidity/{plantId}")]
+        public IActionResult GetAirHumidity(int plantId)
+        {
+            var data = _context.PlantLogs
+                .Where(p => p.Plant_ID == plantId)
+                .OrderByDescending(p => p.Dato_Tid)
+                .FirstOrDefault();
+            // Hvis der ikke er en måling, så returner en fejlbesked
+            // hvor der står "ingen luftfugtighedsdata fundet"
+            return data != null
+                ? Ok(data.AirHumidityLevel)
+                : NotFound("Ingen luftfugtighedsdata fundet");
+        }
+
+        // Dette er GET Metoden for at hente den nyeste jordfugtighedsmåling fra databasen. 
+        // Du siger hvilken plante med "PlantID"
+        [HttpGet("soilmoisture/{plantId}")]
+        public IActionResult GetSoilMoisture(int plantId)
+        {
+            var data = _context.PlantLogs
+                .Where(p => p.Plant_ID == plantId)
+                .OrderByDescending(p => p.Dato_Tid)
+                .FirstOrDefault();
+            // Hvis der ikke er en måling, så returner en fejlbesked
+            // hvor der står "ingen jordfugtighedsdata fundet"
+            return data != null
+                ? Ok(data.WaterLevel)
+                : NotFound("Ingen jordfugtighedsdata fundet");
         }
     }
 }
