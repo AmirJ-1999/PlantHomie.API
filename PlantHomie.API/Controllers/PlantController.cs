@@ -31,6 +31,20 @@ namespace PlantHomie.API.Controllers
             return Ok(plants);
         }
 
+        // GET: api/plant/latest
+        [HttpGet("latest")]
+        public IActionResult GetLatest()
+        {
+            var latestPlant = _context.Plants
+                .OrderByDescending(p => p.Plant_ID)
+                .FirstOrDefault();
+
+            if (latestPlant == null)
+                return NotFound("Ingen planter fundet.");
+
+            return Ok(latestPlant);
+        }
+
         // POST: api/plant
         [HttpPost]
         public IActionResult Create([FromBody] Plant plant)
@@ -44,18 +58,24 @@ namespace PlantHomie.API.Controllers
             return Ok(new { message = "Plante oprettet", plant });
         }
 
-        // GET: api/plant/latest
-        [HttpGet("latest")]
-        public IActionResult GetLatest()
+        // DELETE: api/plant/{id}
+        [HttpDelete("{id}")]
+        public IActionResult Delete(int id)
         {
-            var latestPlant = _context.Plants
-                .OrderByDescending(p => p.Plant_ID)
-                .FirstOrDefault();
+            var plant = _context.Plants.FirstOrDefault(p => p.Plant_ID == id);
 
-            if (latestPlant == null)
-                return NotFound("Ingen planter fundet.");
+            if (plant == null)
+                return NotFound($"Ingen plante fundet med ID {id}");
 
-            return Ok(latestPlant);
+            // Fjern afhængige PlantLog-poster
+            var plantLogs = _context.PlantLogs.Where(pl => pl.Plant_ID == id).ToList();
+            _context.PlantLogs.RemoveRange(plantLogs);
+
+            // Fjerner planten
+            _context.Plants.Remove(plant);
+            _context.SaveChanges();
+
+            return Ok(new { message = $"Plante med ID {id} blev slettet" });
         }
     }
 }
