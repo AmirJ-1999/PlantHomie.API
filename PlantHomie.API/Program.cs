@@ -31,16 +31,13 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Swagger: vis kun i udviklingsmiljø
-if (app.Environment.IsDevelopment())
+// ➤ Swagger aktiveret altid – også i produktion
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "PlantHomie API V1");
-        c.RoutePrefix = ""; // Swagger starter direkte på localhost:5000/
-    });
-}
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "PlantHomie API V1");
+    c.RoutePrefix = ""; // Viser Swagger direkte ved roden (fx: https://...azurewebsites.net/)
+});
 
 // Brug CORS-politikken (tillader at Vue frontend må kontakte backend)
 app.UseCors("AllowAll");
