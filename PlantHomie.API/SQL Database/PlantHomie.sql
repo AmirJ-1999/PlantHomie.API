@@ -34,6 +34,15 @@ CREATE TABLE PlantLog (
 );
 
      SELECT * FROM Plant WHERE Plant_ID = 1; -- Tester om der Plant_ID 1 eksisterer
+
+
+ALTER TABLE [User]
+ADD CONSTRAINT UQ_User_Email UNIQUE (Email);    
+
+ALTER TABLE Plant
+ADD CONSTRAINT UQ_Plant_Name UNIQUE (Plant_Name);
+
+
      
 -- Indsætter en ny plante med Plant_ID 1, Plant_Name 'Example Plant' og Plant_type 'Example Type'
      
