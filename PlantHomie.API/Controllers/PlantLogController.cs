@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using PlantHomie.API.Data;
 using PlantHomie.API.Models;
+using System;
 using System.Linq;
 
 namespace PlantHomie.API.Controllers
@@ -17,22 +18,23 @@ namespace PlantHomie.API.Controllers
             _context = context;
         }
 
+        // ------------------------------------------------------
         // GET: api/plantlog
+        // ------------------------------------------------------
         [HttpGet]
         public IActionResult Index()
         {
             var logs = _context.PlantLogs
-                .Include(p => p.Plant)
-                .OrderByDescending(p => p.Dato_Tid)
-                .ToList();
+                               .Include(p => p.Plant)
+                               .OrderByDescending(p => p.Dato_Tid)
+                               .ToList();
 
-            if (!logs.Any())
-                return NotFound("Ingen data fundet.");
-
-            return Ok(logs);
+            return logs.Any() ? Ok(logs) : NotFound("Ingen data fundet.");
         }
 
+        // ------------------------------------------------------
         // POST: api/plantlog
+        // ------------------------------------------------------
         [HttpPost]
         public IActionResult PostLog([FromBody] PlantLog log)
         {
@@ -40,83 +42,75 @@ namespace PlantHomie.API.Controllers
                 return BadRequest("Data mangler.");
 
             if (!_context.Plants.Any(p => p.Plant_ID == log.Plant_ID))
-                return BadRequest("Plant_ID does not exist in the database.");
+                return BadRequest("Plant_ID findes ikke i databasen.");
 
+            // Sæt tidsstempel til nu
             log.Dato_Tid = DateTime.UtcNow;
 
             _context.PlantLogs.Add(log);
             _context.SaveChanges();
 
-            var savedLog = _context.PlantLogs
-                .Include(p => p.Plant)
-                .FirstOrDefault(p => p.PlantLog_ID == log.PlantLog_ID);
+            var saved = _context.PlantLogs
+                                .Include(p => p.Plant)
+                                .First(p => p.PlantLog_ID == log.PlantLog_ID);
 
-            return Ok(new { message = "Log gemt", log = savedLog });
+            return Ok(new { message = "Log gemt", log = saved });
         }
 
+        // ------------------------------------------------------
         // GET: api/plantlog/latest?plantId=1
+        // ------------------------------------------------------
         [HttpGet("latest")]
         public IActionResult GetLatest(int plantId)
         {
             var latest = _context.PlantLogs
-                .Where(p => p.Plant_ID == plantId)
-                .OrderByDescending(p => p.Dato_Tid)
-                .FirstOrDefault();
+                                 .Where(p => p.Plant_ID == plantId)
+                                 .OrderByDescending(p => p.Dato_Tid)
+                                 .FirstOrDefault();
 
-            if (latest == null)
-                return NotFound("Ingen data fundet for den plante.");
-
-            return Ok(latest);
+            return latest is null
+                ? NotFound("Ingen data fundet for den plante.")
+                : Ok(latest);
         }
 
-        // Dette er GET Metoden for at hente den nyeste temperaturmåling fra databasen.
-        // Du siger hvilken plante med "PlantID"
+        // ------------------------------------------------------
+        // GET: api/plantlog/temperature/1
+        // ------------------------------------------------------
         [HttpGet("temperature/{plantId}")]
-        public IActionResult GetTemperature(int plantId)
-        {
-            var data = _context.PlantLogs
-                .Where(p => p.Plant_ID == plantId)
-                .OrderByDescending(p => p.Dato_Tid)
-                .FirstOrDefault();
+        public IActionResult GetTemperature(int plantId) =>
+            GetSingleValue(plantId, log => log.TemperatureLevel, "temperatur");
 
-            // Hvis der ikke er en måling, så returner en fejlbesked
-            // hvor der står "ingen temperaturdata fundet"
-            return data != null
-                ? Ok(data.Temperaturelevel)
-                : NotFound("Ingen temperaturdata fundet");
-        }
-
-
-        // Dette er GET Metoden for at hente den nyeste luftfugtighedsmåling fra databasen.
-        // Du siger hvilken plante med "PlantID"
+        // ------------------------------------------------------
+        // GET: api/plantlog/airhumidity/1
+        // ------------------------------------------------------
         [HttpGet("airhumidity/{plantId}")]
-        public IActionResult GetAirHumidity(int plantId)
-        {
-            var data = _context.PlantLogs
-                .Where(p => p.Plant_ID == plantId)
-                .OrderByDescending(p => p.Dato_Tid)
-                .FirstOrDefault();
-            // Hvis der ikke er en måling, så returner en fejlbesked
-            // hvor der står "ingen luftfugtighedsdata fundet"
-            return data != null
-                ? Ok(data.AirHumidityLevel)
-                : NotFound("Ingen luftfugtighedsdata fundet");
-        }
+        public IActionResult GetAirHumidity(int plantId) =>
+            GetSingleValue(plantId, log => log.AirHumidityLevel, "luftfugtighed");
 
-        // Dette er GET Metoden for at hente den nyeste jordfugtighedsmåling fra databasen. 
-        // Du siger hvilken plante med "PlantID"
+        // ------------------------------------------------------
+        // GET: api/plantlog/soilmoisture/1
+        // ------------------------------------------------------
         [HttpGet("soilmoisture/{plantId}")]
-        public IActionResult GetSoilMoisture(int plantId)
+        public IActionResult GetSoilMoisture(int plantId) =>
+            GetSingleValue(plantId, log => log.WaterLevel, "jordfugtighed");
+
+        // ------------------------------------------------------
+        // Fælles helper-metode
+        // ------------------------------------------------------
+        private IActionResult GetSingleValue(
+            int plantId,
+            Func<PlantLog, double?> selector,
+            string label)
         {
-            var data = _context.PlantLogs
-                .Where(p => p.Plant_ID == plantId)
-                .OrderByDescending(p => p.Dato_Tid)
-                .FirstOrDefault();
-            // Hvis der ikke er en måling, så returner en fejlbesked
-            // hvor der står "ingen jordfugtighedsdata fundet"
-            return data != null
-                ? Ok(data.WaterLevel)
-                : NotFound("Ingen jordfugtighedsdata fundet");
+            var value = _context.PlantLogs
+                                .Where(p => p.Plant_ID == plantId)
+                                .OrderByDescending(p => p.Dato_Tid)
+                                .Select(selector)
+                                .FirstOrDefault();
+
+            return value.HasValue
+                ? Ok(value.Value)
+                : NotFound($"Ingen {label}data fundet");
         }
     }
 }

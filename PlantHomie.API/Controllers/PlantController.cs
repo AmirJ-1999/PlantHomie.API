@@ -1,9 +1,8 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using PlantHomie.API.Data;
 using PlantHomie.API.Models;
-using System.Linq;
+using Swashbuckle.AspNetCore.Annotations;
 
 namespace PlantHomie.API.Controllers
 {
@@ -12,86 +11,95 @@ namespace PlantHomie.API.Controllers
     public class PlantController : ControllerBase
     {
         private readonly PlantHomieContext _context;
+        private readonly IWebHostEnvironment _env;
 
-        public PlantController(PlantHomieContext context)
+        public PlantController(PlantHomieContext context, IWebHostEnvironment env)
         {
             _context = context;
+            _env = env;
         }
 
+        // ------------------------------------------------------
         // GET: api/plant
+        // ------------------------------------------------------
         [HttpGet]
         public IActionResult GetAll()
-        {
-            var plants = _context.Plants
-                .OrderBy(p => p.Plant_Name)
-                .ToList();
+            => Ok(_context.Plants.OrderBy(p => p.Plant_Name).ToList());
 
-            if (!plants.Any())
-                return NotFound("Ingen planter fundet.");
-
-            return Ok(plants);
-        }
-
+        // ------------------------------------------------------
         // GET: api/plant/latest
+        // ------------------------------------------------------
         [HttpGet("latest")]
         public IActionResult GetLatest()
         {
-            var latestPlant = _context.Plants
-                .OrderByDescending(p => p.Plant_ID)
-                .FirstOrDefault();
-
-            if (latestPlant == null)
-                return NotFound("Ingen planter fundet.");
-
-            return Ok(latestPlant);
+            var latest = _context.Plants
+                                 .OrderByDescending(p => p.Plant_ID)
+                                 .FirstOrDefault();
+            return latest is null ? NotFound() : Ok(latest);
         }
 
-        // POST: api/plant
+        // ------------------------------------------------------
+        // POST: api/plant  (multipart/form-data)
+        // ------------------------------------------------------
+        [Consumes("multipart/form-data")]
+        [SwaggerOperation(Summary = "Opretter en plante med valgfrit billede")]
         [HttpPost]
-        public IActionResult Create([FromBody] Plant plant)
+        [DisableRequestSizeLimit]
+        public async Task<IActionResult> Create([FromForm] PlantCreateRequest data)
         {
-            if (plant == null)
-                return BadRequest("Data mangler.");
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
 
-            try
+            // Gem billede hvis et er vedhæftet
+            string? imageUrl = null;
+            if (data.Image is { Length: > 0 })
             {
-                _context.Plants.Add(plant);
-                _context.SaveChanges();
-                return Ok(new { message = "Plante oprettet", plant });
-            }
-            catch (DbUpdateException ex) // Håndterer databaseopdateringsfejl
+                var uploadsDir = Path.Combine(_env.WebRootPath ?? "wwwroot", "uploads");
+                Directory.CreateDirectory(uploadsDir);
 
-            {
-                if (ex.InnerException is SqlException sqlEx && sqlEx.Number == 2627) // 2627 er fejlnummeret for unikke begrænsningsovertrædelser
-                {
-                    // Tjek hvilken unik begrænsning der blev overtrådt
-                    if (sqlEx.Message.Contains("PK__Plant")) // Primær nøglebegrænsning (Plant_ID)
-                        return BadRequest("En plante med dette ID eksisterer allerede. Vælg et andet ID.");
-                    if (sqlEx.Message.Contains("UQ_Plant_Name") || sqlEx.Message.Contains("UQ__Plant__")) // Unik begrænsning på Plant_Name
-                        return BadRequest("En plante med dette navn eksisterer allerede. Vælg et andet navn.");
-                }
-                throw; // Hvis det ikke er en unik begrænsningsovertrædelse, håndteres det på en anden måde
+                var fileName = $"{Guid.NewGuid()}{Path.GetExtension(data.Image.FileName)}";
+                var path = Path.Combine(uploadsDir, fileName);
+
+                await using var stream = System.IO.File.Create(path);
+                await data.Image.CopyToAsync(stream);
+
+                imageUrl = $"/uploads/{fileName}";
             }
+
+            var plant = new Plant
+            {
+                Plant_Name = data.Plant_Name.Trim(),
+                Plant_type = data.Plant_type.Trim(),
+                ImageUrl = imageUrl
+            };
+
+            _context.Plants.Add(plant);
+            await _context.SaveChangesAsync();
+
+            return Ok(plant);
         }
 
+        // ------------------------------------------------------
         // DELETE: api/plant/{id}
-        [HttpDelete("{id}")]
-        public IActionResult Delete(int id)
+        // ------------------------------------------------------
+        [HttpDelete("{id:int}")]
+        public async Task<IActionResult> Delete(int id)
         {
-            var plant = _context.Plants.FirstOrDefault(p => p.Plant_ID == id); // Find planten med det angivne ID
+            var plant = await _context.Plants.FindAsync(id);
+            if (plant is null) return NotFound();
 
-            if (plant == null)
-                return NotFound($"Ingen plante fundet med ID {id}");
+            // Slet billedefil fra disk hvis den findes
+            if (!string.IsNullOrEmpty(plant.ImageUrl))
+            {
+                var path = Path.Combine(_env.WebRootPath ?? "wwwroot",
+                                        plant.ImageUrl.TrimStart('/'));
+                if (System.IO.File.Exists(path))
+                    System.IO.File.Delete(path);
+            }
 
-            // Fjern afhængige PlantLog-poster
-            var plantLogs = _context.PlantLogs.Where(pl => pl.Plant_ID == id).ToList();
-            _context.PlantLogs.RemoveRange(plantLogs);
-
-            // Fjerner planten
             _context.Plants.Remove(plant);
-            _context.SaveChanges();
-
-            return Ok(new { message = $"Plante med ID {id} blev slettet" });
+            await _context.SaveChangesAsync();
+            return Ok();
         }
     }
 }

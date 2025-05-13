@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using PlantHomie.API.Data;
-using PlantHomie.API.Services; // <- Husk at du skal have din SensorBackgroundService her
+using PlantHomie.API.Services; // SensorBackgroundService
+using Swashbuckle.AspNetCore.SwaggerGen;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,14 +12,23 @@ builder.Services.AddDbContext<PlantHomieContext>(options =>
 // Tilføj controllere (API-ruter)
 builder.Services.AddControllers();
 
-// Tilføj baggrundsservice (kan fx sende dummy-sensor-data eller overvåge noget)
+// Tilføj baggrundsservice (fx dummy-sensordata)
 builder.Services.AddHostedService<SensorBackgroundService>();
 
-// Tilføj Swagger (API-dokumentation og testværktøj)
+// Tilføj Swagger (API-dokumentation)
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.EnableAnnotations(); // ← nødvendig for Swagger @annotations og [FromForm]/IFormFile
+});
 
-// Tilføj CORS-politik som tillader alle domæner (for Vue frontend adgang)
+// (Valgfrit men anbefalet) Gør Swagger mindre følsom for FormFile-konflikter
+builder.Services.Configure<Microsoft.AspNetCore.Mvc.ApiBehaviorOptions>(options =>
+{
+    options.SuppressConsumesConstraintForFormFileParameters = true;
+});
+
+// Tilføj CORS-politik som tillader alle domæner (til Vue)
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
@@ -45,14 +55,12 @@ if (app.Environment.IsDevelopment())
 // Brug CORS-politikken (tillader at Vue frontend må kontakte backend)
 app.UseCors("AllowAll");
 
-// Brug HTTPS redirect
+app.UseStaticFiles(); // giver adgang til fx /uploads/billede.jpg
+
 app.UseHttpsRedirection();
 
-// Brug autorisation (kan aktiveres senere, fx hvis I har brugere)
 app.UseAuthorization();
 
-// Kortlæg controllere til endpoints
 app.MapControllers();
 
-// Start hele web-API'en
 app.Run();
