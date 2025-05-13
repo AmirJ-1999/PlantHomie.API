@@ -38,8 +38,8 @@ namespace PlantHomie.API.Services
                 await context.PlantLogs.AddAsync(newLog, stoppingToken);
                 await context.SaveChangesAsync(stoppingToken);
 
-                // Venter en time før næste måling
-                await Task.Delay(TimeSpan.FromHours(1), stoppingToken);
+                // Venter seks timer før næste måling
+                await Task.Delay(TimeSpan.FromHours(6), stoppingToken);
             }
         }
     }
