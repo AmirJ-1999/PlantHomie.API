@@ -12,5 +12,8 @@ namespace PlantHomie.API.Models
 
         [StringLength(50)]
         public string? Plant_type { get; set; }
+
+        [StringLength(255)]
+        public string? ImageUrl { get; set; } // <- Tilføjet manuelt
     }
 }

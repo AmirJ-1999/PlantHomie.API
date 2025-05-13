@@ -3,7 +3,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using PlantHomie.API.Data;
 using PlantHomie.API.Models;
-using System.Linq;
+using System.IO;
 
 namespace PlantHomie.API.Controllers
 {
@@ -12,23 +12,21 @@ namespace PlantHomie.API.Controllers
     public class PlantController : ControllerBase
     {
         private readonly PlantHomieContext _context;
+        private readonly IWebHostEnvironment _env;
 
-        public PlantController(PlantHomieContext context)
+        public PlantController(PlantHomieContext context, IWebHostEnvironment env)
         {
             _context = context;
+            _env = env;
         }
 
         // GET: api/plant
         [HttpGet]
         public IActionResult GetAll()
         {
-            var plants = _context.Plants
-                .OrderBy(p => p.Plant_Name)
-                .ToList();
-
+            var plants = _context.Plants.OrderBy(p => p.Plant_Name).ToList();
             if (!plants.Any())
                 return NotFound("Ingen planter fundet.");
-
             return Ok(plants);
         }
 
@@ -48,29 +46,54 @@ namespace PlantHomie.API.Controllers
 
         // POST: api/plant
         [HttpPost]
-        public IActionResult Create([FromBody] Plant plant)
+        public async Task<IActionResult> Create([FromForm] string Plant_Name, [FromForm] string Plant_type, [FromForm] IFormFile? Image)
         {
-            if (plant == null)
-                return BadRequest("Data mangler.");
+            if (string.IsNullOrWhiteSpace(Plant_Name))
+                return BadRequest("Plant_Name mangler.");
+
+            string? imageUrl = null;
+
+            // Hvis der medfølger billede
+            if (Image != null && Image.Length > 0)
+            {
+                var uploadsPath = Path.Combine(_env.WebRootPath, "uploads");
+                Directory.CreateDirectory(uploadsPath); // sikrer mappen findes
+
+                var uniqueFileName = Guid.NewGuid().ToString() + Path.GetExtension(Image.FileName);
+                var filePath = Path.Combine(uploadsPath, uniqueFileName);
+
+                using (var stream = new FileStream(filePath, FileMode.Create))
+                {
+                    await Image.CopyToAsync(stream);
+                }
+
+                imageUrl = $"/uploads/{uniqueFileName}";
+            }
+
+            var newPlant = new Plant
+            {
+                Plant_Name = Plant_Name,
+                Plant_type = Plant_type,
+                ImageUrl = imageUrl
+            };
 
             try
             {
-                _context.Plants.Add(plant);
-                _context.SaveChanges();
-                return Ok(new { message = "Plante oprettet", plant });
+                _context.Plants.Add(newPlant);
+                await _context.SaveChangesAsync();
+                return Ok(new { message = "Plante oprettet", plant = newPlant });
             }
-            catch (DbUpdateException ex) // Håndterer databaseopdateringsfejl
-
+            catch (DbUpdateException ex)
             {
-                if (ex.InnerException is SqlException sqlEx && sqlEx.Number == 2627) // 2627 er fejlnummeret for unikke begrænsningsovertrædelser
+                if (ex.InnerException is SqlException sqlEx && sqlEx.Number == 2627)
                 {
-                    // Tjek hvilken unik begrænsning der blev overtrådt
-                    if (sqlEx.Message.Contains("PK__Plant")) // Primær nøglebegrænsning (Plant_ID)
-                        return BadRequest("En plante med dette ID eksisterer allerede. Vælg et andet ID.");
-                    if (sqlEx.Message.Contains("UQ_Plant_Name") || sqlEx.Message.Contains("UQ__Plant__")) // Unik begrænsning på Plant_Name
-                        return BadRequest("En plante med dette navn eksisterer allerede. Vælg et andet navn.");
+                    if (sqlEx.Message.Contains("PK__Plant"))
+                        return BadRequest("En plante med dette ID eksisterer allerede.");
+                    if (sqlEx.Message.Contains("UQ_Plant_Name") || sqlEx.Message.Contains("UQ__Plant__"))
+                        return BadRequest("En plante med dette navn eksisterer allerede.");
                 }
-                throw; // Hvis det ikke er en unik begrænsningsovertrædelse, håndteres det på en anden måde
+
+                throw;
             }
         }
 
@@ -78,16 +101,12 @@ namespace PlantHomie.API.Controllers
         [HttpDelete("{id}")]
         public IActionResult Delete(int id)
         {
-            var plant = _context.Plants.FirstOrDefault(p => p.Plant_ID == id); // Find planten med det angivne ID
-
+            var plant = _context.Plants.FirstOrDefault(p => p.Plant_ID == id);
             if (plant == null)
                 return NotFound($"Ingen plante fundet med ID {id}");
 
-            // Fjern afhængige PlantLog-poster
             var plantLogs = _context.PlantLogs.Where(pl => pl.Plant_ID == id).ToList();
             _context.PlantLogs.RemoveRange(plantLogs);
-
-            // Fjerner planten
             _context.Plants.Remove(plant);
             _context.SaveChanges();
 

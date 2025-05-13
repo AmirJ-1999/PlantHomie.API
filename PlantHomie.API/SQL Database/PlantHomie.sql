@@ -45,4 +45,7 @@ ADD CONSTRAINT UQ_Plant_Name UNIQUE (Plant_Name);
 
      
 -- Indsætter en ny plante med Plant_ID 1, Plant_Name 'Example Plant' og Plant_type 'Example Type'
-     
+
+
+ALTER TABLE Plant
+ADD ImageUrl VARCHAR(255) NULL;

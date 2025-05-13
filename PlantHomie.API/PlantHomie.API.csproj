@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <Folder Include="PythonFrontEnd\" />
+    <Folder Include="wwwroot\uploads\" />
   </ItemGroup>
 
 </Project>
