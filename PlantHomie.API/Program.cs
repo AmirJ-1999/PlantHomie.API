@@ -41,17 +41,6 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Swagger: vis kun i udviklingsmiljø
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "PlantHomie API V1");
-        c.RoutePrefix = ""; // Swagger starter direkte på localhost:5000/
-    });
-}
-
 // Brug CORS-politikken (tillader at Vue frontend må kontakte backend)
 app.UseCors("AllowAll");
 
@@ -62,5 +51,16 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 
 app.MapControllers();
+
+/* 
+   Swagger-UI skal være default startside – både lokalt og i Azure
+*/
+app.UseSwagger();
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "PlantHomie API V1");
+    c.RoutePrefix = "";          // ← gør Swagger til root (https://<site>/)
+});
+
 
 app.Run();

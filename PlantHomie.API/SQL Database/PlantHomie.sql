@@ -8,15 +8,34 @@ USE PlantHomie;
 GO
 
 /* =========================================================
-   1)   Brugere
-   ========================================================= */
+   1)   Brugere -Gammel version
+   ========================================================= 
 CREATE TABLE dbo.[User] (
     User_ID        INT            IDENTITY(1,1) PRIMARY KEY,
     Name           VARCHAR(50)    NOT NULL,
     Email          VARCHAR(50)    NOT NULL UNIQUE,
     Information    TEXT           NULL,
     Plants_amount  INT            NULL
+);*/
+
+
+/* =========================================================
+   Brugere
+   ========================================================= */
+CREATE TABLE dbo.[User] (
+    User_ID        INT          IDENTITY(1,1) PRIMARY KEY,
+    UserName       VARCHAR(50)  NOT NULL UNIQUE,
+    PasswordHash   VARCHAR(200) NOT NULL,
+    Subscription   VARCHAR(20)  NOT NULL,     -- Free / Premium_…
+    Name           VARCHAR(50)  NULL,         -- valgfrit
+    Email          VARCHAR(50)  NULL UNIQUE,  -- valgfrit
+    Plants_amount  INT          NULL          -- udfyldes i API’et
 );
+GO
+
+
+
+
 
 ------------------------------------------------------------
 /* =========================================================
@@ -64,8 +83,10 @@ CREATE TABLE dbo.PlantLog (
 
    --5)   (Valgfrit) Seed et par rækker til test
 
-INSERT dbo.[User] (Name, Email, Information, Plants_amount)
-VALUES ('Test-Bruger', 'test@demo.local', NULL, 1);
+INSERT INTO dbo.Plant (Plant_Name, Plant_type)
+VALUES ('Test plant', 'Dummy');
+-- Plant_ID bliver 1, hvis tabellen var tom
+
 
 INSERT dbo.Plant (Plant_Name, Plant_type)
 VALUES ('Demo Plant', 'Succulent');
