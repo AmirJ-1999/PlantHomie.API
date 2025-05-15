@@ -16,9 +16,9 @@ public class User
     [Required, StringLength(20)]
     public string Subscription { get; set; } = "Free";
 
-    /* Valgfire felt­er */
+    /* Valgfire felt­er
     [StringLength(50)] public string? Name { get; set; }
     [StringLength(50)] public string? Email { get; set; }
-
+    */
     public int Plants_amount { get; set; }
 }

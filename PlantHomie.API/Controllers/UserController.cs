@@ -13,31 +13,38 @@ namespace PlantHomie.API.Controllers;
 public class UserController : ControllerBase
 {
     private readonly PlantHomieContext _ctx;
-    public UserController(PlantHomieContext ctx) => _ctx = ctx;
+    private readonly ILogger<UserController> _log;
+
+    public UserController(PlantHomieContext ctx, ILogger<UserController> log)
+    {
+        _ctx = ctx;
+        _log = log;
+    }
 
     /* ---------- SIGN-UP ---------- */
     [HttpPost("signup")]
     public async Task<IActionResult> Signup(UserSignupDto dto)
     {
         if (await _ctx.Users.AnyAsync(u => u.UserName == dto.UserName))
-            return BadRequest("Username already taken.");
+            return Conflict("Username already taken.");
 
         var user = new User
         {
             UserName = dto.UserName,
-            PasswordHash = Hash(dto.Password),
+            PasswordHash = Hash(dto.Password),          // simpelt SHA-256-hash
             Subscription = dto.Subscription,
             Plants_amount = dto.Subscription switch
             {
                 "Premium_Silver" => 30,
                 "Premium_Gold" => 50,
                 "Premium_Plat" => 100,
-                _ => 10     // Free
+                _ => 10                    // Free
             }
         };
 
         _ctx.Users.Add(user);
         await _ctx.SaveChangesAsync();
+
         return Ok(new { message = "Account created" });
     }
 
@@ -45,22 +52,30 @@ public class UserController : ControllerBase
     [HttpPost("login")]
     public async Task<IActionResult> Login(UserLoginDto dto)
     {
-        var user = await _ctx.Users.FirstOrDefaultAsync(u => u.UserName == dto.UserName);
+        var user = await _ctx.Users
+                             .FirstOrDefaultAsync(u => u.UserName == dto.UserName);
+
         if (user is null || user.PasswordHash != Hash(dto.Password))
             return Unauthorized("Invalid credentials.");
 
-        // Returnér evt. JWT – her blot dummy-token
+        // Returnér evt. rigtigt JWT-token – her blot dummy-token
         return Ok(new { token = "mock-token", role = "user" });
     }
 
-    /* ---------- LIST (admin/demo) ---------- */
+    /* ---------- LIST (admin ---------- */
     [HttpGet]
     public async Task<IActionResult> GetAll() =>
         Ok(await _ctx.Users
-             .Select(u => new { u.User_ID, u.UserName, u.Subscription, u.Plants_amount })
-             .ToListAsync());
+                     .Select(u => new
+                     {
+                         u.User_ID,
+                         u.UserName,
+                         u.Subscription,
+                         u.Plants_amount
+                     })
+                     .ToListAsync());
 
-    /* --- lille helper --- */
+    // koden til at hash'e passwords
     private static string Hash(string text)
     {
         using var sha = SHA256.Create();

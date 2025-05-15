@@ -27,8 +27,6 @@ CREATE TABLE dbo.[User] (
     UserName       VARCHAR(50)  NOT NULL UNIQUE,
     PasswordHash   VARCHAR(200) NOT NULL,
     Subscription   VARCHAR(20)  NOT NULL,     -- Free / Premium_…
-    Name           VARCHAR(50)  NULL,         -- valgfrit
-    Email          VARCHAR(50)  NULL UNIQUE,  -- valgfrit
     Plants_amount  INT          NULL          -- udfyldes i API’et
 );
 GO
@@ -94,3 +92,16 @@ VALUES ('Demo Plant', 'Succulent');
 INSERT dbo.PlantLog (Plant_ID, TemperatureLevel, WaterLevel, AirHumidityLevel)
 VALUES (1, 21.5, 45.0, 55.0);
 GO
+
+-- my user
+INSERT INTO dbo.[User] (UserName, PasswordHash, Subscription, Plants_amount)
+VALUES (
+    'dummyuser',
+    'abc123hashedpassword',  -- Antag en hash; brug en rigtig hashing-funktion i praksis
+    'Free',
+    10
+);
+
+
+DROP TABLE dbo.Notification;
+DROP TABLE dbo.[User];
