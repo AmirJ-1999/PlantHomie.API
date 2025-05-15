@@ -1,8 +1,11 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PlantHomie.API.Data;
 using PlantHomie.API.DTOs;
 using PlantHomie.API.Models;
+using PlantHomie.API.Services;
+using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -14,19 +17,21 @@ public class UserController : ControllerBase
 {
     private readonly PlantHomieContext _ctx;
     private readonly ILogger<UserController> _log;
+    private readonly JwtService _jwtService;
 
-    public UserController(PlantHomieContext ctx, ILogger<UserController> log)
+    public UserController(PlantHomieContext ctx, ILogger<UserController> log, JwtService jwtService)
     {
         _ctx = ctx;
         _log = log;
+        _jwtService = jwtService;
     }
 
-    /* ---------- SIGN-UP ---------- */
+    // OPRET BRUGER
     [HttpPost("signup")]
     public async Task<IActionResult> Signup(UserSignupDto dto)
     {
         if (await _ctx.Users.AnyAsync(u => u.UserName == dto.UserName))
-            return Conflict("Username already taken.");
+            return Conflict("Brugernavnet er allerede taget.");
 
         var user = new User
         {
@@ -45,10 +50,10 @@ public class UserController : ControllerBase
         _ctx.Users.Add(user);
         await _ctx.SaveChangesAsync();
 
-        return Ok(new { message = "Account created" });
+        return Ok(new { message = "Konto oprettet" });
     }
 
-    /* ---------- LOGIN ---------- */
+    // LOGIN
     [HttpPost("login")]
     public async Task<IActionResult> Login(UserLoginDto dto)
     {
@@ -56,13 +61,43 @@ public class UserController : ControllerBase
                              .FirstOrDefaultAsync(u => u.UserName == dto.UserName);
 
         if (user is null || user.PasswordHash != Hash(dto.Password))
-            return Unauthorized("Invalid credentials.");
+            return Unauthorized("Ugyldige loginoplysninger.");
 
-        // Returnér evt. rigtigt JWT-token – her blot dummy-token
-        return Ok(new { token = "mock-token", role = "user" });
+        // Generer JWT token
+        var token = _jwtService.GenerateToken(user);
+        
+        return Ok(new { 
+            token = token, 
+            role = "user",
+            userId = user.User_ID,
+            subscription = user.Subscription
+        });
     }
 
-    /* ---------- LIST (admin ---------- */
+    // HENT BRUGERPROFIL
+    [Authorize]
+    [HttpGet("profile")]
+    public async Task<IActionResult> GetProfile()
+    {
+        // Hent bruger-ID fra token-claims
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        
+        if (string.IsNullOrEmpty(userId) || !int.TryParse(userId, out int id))
+            return Unauthorized("Ugyldig token");
+            
+        var user = await _ctx.Users.FindAsync(id);
+        if (user == null)
+            return NotFound("Bruger ikke fundet");
+            
+        return Ok(new {
+            user.User_ID,
+            user.UserName,
+            user.Subscription,
+            user.Plants_amount
+        });
+    }
+
+    // LISTE (admin)
     [HttpGet]
     public async Task<IActionResult> GetAll() =>
         Ok(await _ctx.Users
@@ -75,7 +110,7 @@ public class UserController : ControllerBase
                      })
                      .ToListAsync());
 
-    // koden til at hash'e passwords
+    // Kode til at hash'e adgangskoder
     private static string Hash(string text)
     {
         using var sha = SHA256.Create();
