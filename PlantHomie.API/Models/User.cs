@@ -1,24 +1,22 @@
-﻿// Models/User.cs
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 
-namespace PlantHomie.API.Models;
-
-public class User
+namespace PlantHomie.API.Models
 {
-    [Key] public int User_ID { get; set; }
+    public class User
+    {
+        [Key]
+        public int User_ID { get; set; }
 
-    [Required, StringLength(50)]
-    public string UserName { get; set; } = default!;
+        [Required]
+        [StringLength(50)]
+        public string Name { get; set; }
 
-    [Required, StringLength(200)]
-    public string PasswordHash { get; set; } = default!;
+        [Required]
+        [StringLength(50)]
+        public string Email { get; set; }
 
-    [Required, StringLength(20)]
-    public string Subscription { get; set; } = "Free";
+        public string? Information { get; set; } // -- der er ikke NOT NULL her
 
-    /* Valgfire felt­er
-    [StringLength(50)] public string? Name { get; set; }
-    [StringLength(50)] public string? Email { get; set; }
-    */
-    public int Plants_amount { get; set; }
+        public int Plants_amount { get; set; }
+    }
 }
