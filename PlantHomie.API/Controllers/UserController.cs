@@ -1,148 +1,170 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.Mvc; // er til at lave API controller
+using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore; // er til at lave API controller
 using PlantHomie.API.Data;
 using PlantHomie.API.Models;
-using System.Linq;
+using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
+using PlantHomie.API.Services;
 
 namespace PlantHomie.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    public class PlantLogController : ControllerBase
+    public class UserController : ControllerBase
     {
-        private readonly PlantHomieContext _context;
+        private readonly PlantHomieContext _ctx;
+        private readonly JwtService _jwtService;
 
-        public PlantLogController(PlantHomieContext context)
+        public UserController(PlantHomieContext context, JwtService jwtService)
         {
-            _context = context;
+            _ctx = context;
+            _jwtService = jwtService;
         }
 
-        // GET: api/plantlog
-        [Authorize] // Endpoint kræver autentifikation (gyldigt JWT token)
-        [HttpGet] // HTTP GET endpoint: api/plantlog
-        public IActionResult Index()
+        // REGISTRERING
+        [HttpPost("register")] // HTTP POST endpoint: api/user/register
+        public async Task<IActionResult> Register(UserRegisterDto dto)
         {
-            // Henter User ID fra JWT tokenets claims for at sikre, at kun brugerens egne logs hentes.
-            if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int userId))
-                return Unauthorized("Invalid token or missing User ID claim."); // HTTP 401 hvis token/claim er ugyldigt
-                
-            var logs = _context.PlantLogs
-                               .Include(p => p.Plant) // Inkluderer relaterede Plant-objekter (for at få plantenavn etc.)
-                               .Where(p => p.Plant != null && p.Plant.User_ID == userId) // Filtrerer på User_ID via den relaterede Plant
-                               .OrderByDescending(p => p.Dato_Tid) // Sorterer nyeste logs først
-                               .ToList(); // Udfører forespørgslen og returnerer en liste
+            // Valider at den modtagne krop indeholder et gyldigt UserRegisterDto-objekt
+            if (dto is null || string.IsNullOrEmpty(dto.UserName) || string.IsNullOrEmpty(dto.Password))
+                return BadRequest("Brugernavn og adgangskode skal udfyldes.");
 
-            return logs.Any() ? Ok(logs) : NotFound("No data found."); // HTTP 200 med logs, eller 404 hvis ingen logs findes
-        }
+            // Tjek om brugernavnet allerede findes i databasen
+            if (await _ctx.Users.AnyAsync(u => u.UserName == dto.UserName))
+                return Conflict("Dette brugernavn er allerede i brug.");
 
-        // POST: api/plantlog
-        [Authorize] // Kræver autentifikation
-        [HttpPost] // HTTP POST endpoint: api/plantlog
-        public IActionResult PostLog([FromBody] PlantLog log) // Modtager PlantLog data fra request body
-        {
-            if (log == null) // Grundlæggende validering af input
-                return BadRequest("Missing data."); // HTTP 400 hvis request body er tom
-                
-            // Henter User ID fra token
-            if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int userId))
-                return Unauthorized("Invalid token or missing User ID claim.");
+            // Opret ny User med data fra DTO'en
+            var user = new User
+            {
+                UserName = dto.UserName,
+                PasswordHash = Hash(dto.Password), // Hasher den modtagne adgangskode vha. SHA-256
+                Subscription = dto.Subscription,
+                // Sætter antal planter baseret på abonnementstype. Standard er 10 for "Free".
+                Plants_amount = dto.Subscription switch
+                {
+                    "Premium_Silver" => 30,
+                    "Premium_Gold" => 50,
+                    "Premium_Plat" => 100,
+                    _ => 10 // Standard for "Free" eller enhver anden/ukendt subscription string
+                }
+            };
 
-            // Verificerer at den angivne Plant_ID eksisterer og tilhører den autentificerede bruger
-            var plant = _context.Plants.FirstOrDefault(p => p.Plant_ID == log.Plant_ID);
-            if (plant == null)
-                return BadRequest("Plant ID not found in database."); // HTTP 400 hvis planten ikke findes
-                
-            if (plant.User_ID != userId) // Autorisationstjek: Bruger må kun logge på egne planter
-                return Forbid("You do not have permission to log data for this plant. It belongs to another user."); // HTTP 403
+            try
+            {
+                _ctx.Users.Add(user); // Tilføjer den nye bruger til DbContext (tracking)
+                await _ctx.SaveChangesAsync(); // Gemmer ændringer (den nye bruger) til databasen
+            }
+            catch (DbUpdateException ex) // Håndterer databaseopdateringsfejl
+            {
+                if (ex.InnerException is SqlException sqlEx && sqlEx.Number == 2627) // 2627 er fejlnummeret for unikke begrænsningsovertrædelser
+                {
+                    // Tjek constraint-navn for at give korrekt besked
+                    if (sqlEx.Message.Contains("PK__User")) // Primær nøglebegrænsning (User_ID)
+                        return BadRequest("En bruger med dette ID eksisterer allerede. Vælg et andet ID.");
+                    if (sqlEx.Message.Contains("UQ__User__Email") || sqlEx.Message.Contains("UQ__User__") || sqlEx.Message.Contains("UQ_User_Email")) // Unik begrænsning på Email
+                        return BadRequest("En bruger med denne email eksisterer allerede. Vælg en anden email.");
+                }
+                throw; // Hvis det ikke er en unik begrænsningsovertrædelse, håndteres det på en anden måde
+            }
 
-            // Sætter Dato_Tid til aktuel UTC tid. Klienten bør ikke sætte dette.
-            log.Dato_Tid = DateTime.UtcNow;
-
-            _context.PlantLogs.Add(log); // Tilføjer log til DbContext
-            _context.SaveChanges(); // Gemmer til databasen
-
-            // Henter den gemte log igen, inklusiv relaterede data, for at returnere et komplet objekt
-            var saved = _context.PlantLogs
-                                .Include(p => p.Plant)
-                                .First(p => p.PlantLog_ID == log.PlantLog_ID);
-
-            return Ok(new { message = "Log saved", log = saved }); // HTTP 200 med bekræftelse og den gemte log
-        }
-
-        // GET: api/plantlog/latest?plantId=1
-        [Authorize] // Kræver autentifikation
-        [HttpGet("latest")] // HTTP GET endpoint: api/plantlog/latest
-        public IActionResult GetLatest(int plantId) // plantId modtages fra query parameter
-        {
-            // Henter User ID fra token
-            if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int userId))
-                return Unauthorized("Invalid token or missing User ID claim.");
-                
-            // Verificerer at planten eksisterer og tilhører den autentificerede bruger
-            var plant = _context.Plants.FirstOrDefault(p => p.Plant_ID == plantId);
-            if (plant == null)
-                return NotFound("Plant not found"); // HTTP 404 hvis planten ikke findes
-                
-            if (plant.User_ID != userId) // Autorisationstjek
-                return Forbid("You do not have permission to access this plant. It belongs to another user."); // HTTP 403
+            // Genererer et JWT token til den nyoprettede bruger
+            var token = _jwtService.GenerateToken(user);
             
-            var latest = _context.PlantLogs
-                                 .Where(p => p.Plant_ID == plantId) // Filtrerer på den specifikke Plant_ID
-                                 .OrderByDescending(p => p.Dato_Tid) // Nyeste først
-                                 .FirstOrDefault(); // Henter den seneste log eller null
-
-            return latest is null
-                ? NotFound("No data found for this plant.") // HTTP 404 hvis ingen logs for denne plante
-                : Ok(latest); // HTTP 200 med den seneste log
+            // Returnerer HTTP 201 Created med bruger-ID, token og abonnementstype
+            return Created(string.Empty, new
+            {
+                userId = user.User_ID,
+                token,
+                subscription = user.Subscription
+            });
         }
 
-        // GET: api/plantlog/temperature/1
-        [Authorize]
-        [HttpGet("temperature/{plantId}")] // Route parameter {plantId}
-        public IActionResult GetTemperature(int plantId) =>
-            GetSingleValue(plantId, log => log.TemperatureLevel, "temperature");
-
-        // GET: api/plantlog/airhumidity/1
-        [Authorize]
-        [HttpGet("airhumidity/{plantId}")]
-        public IActionResult GetAirHumidity(int plantId) =>
-            GetSingleValue(plantId, log => log.AirHumidityLevel, "humidity");
-
-        // GET: api/plantlog/soilmoisture/1
-        [Authorize]
-        [HttpGet("soilmoisture/{plantId}")]
-        public IActionResult GetSoilMoisture(int plantId) =>
-            GetSingleValue(plantId, log => log.WaterLevel, "moisture");
-
-        // Privat helper-metode til at hente den seneste værdi for et specifikt sensor-felt (fx temperatur)
-        private IActionResult GetSingleValue(
-            int plantId,
-            Func<PlantLog, double?> selector, // En funktion (lambda) der specificerer hvilket felt der skal hentes (fx log => log.TemperatureLevel)
-            string label) // Bruges til fejlbeskeden hvis ingen data findes
+        // LOGIN
+        [HttpPost("login")] // HTTP POST endpoint: api/user/login
+        public async Task<IActionResult> Login(UserLoginDto dto)
         {
-            // Henter User ID fra token for autorisation
-            if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int userId))
-                return Unauthorized("Invalid token or missing User ID claim.");
-                
-            // Verificerer at planten eksisterer og tilhører den autentificerede bruger
-            var plant = _context.Plants.FirstOrDefault(p => p.Plant_ID == plantId);
-            if (plant == null)
-                return NotFound("Plant not found");
-                
-            if (plant.User_ID != userId) // Autorisationstjek
-                return Forbid("You do not have permission to access this plant. It belongs to another user.");
-                
-            var value = _context.PlantLogs
-                                .Where(p => p.Plant_ID == plantId) // Filtrer på Plant_ID
-                                .OrderByDescending(p => p.Dato_Tid) // Nyeste først
-                                .Select(selector) // Vælger det specifikke felt vha. selector-funktionen
-                                .FirstOrDefault(); // Henter den seneste værdi eller null
+            // Forsøger at hente brugeren fra databasen baseret på brugernavn
+            var user = await _ctx.Users
+                                 .FirstOrDefaultAsync(u => u.UserName == dto.UserName);
 
-            return value.HasValue // Tjekker om værdien er fundet (ikke null)
-                ? Ok(value.Value) // HTTP 200 med værdien
-                : NotFound($"No {label} data found"); // HTTP 404 hvis ingen data for det specifikke felt
+            // Hvis brugeren ikke findes eller hashet password ikke matcher, returneres HTTP 401 Unauthorized
+            if (user is null || user.PasswordHash != Hash(dto.Password))
+                return Unauthorized("Ugyldige loginoplysninger.");
+
+            // Bruger JwtService til at generere et JWT token for den autentificerede bruger
+            var token = _jwtService.GenerateToken(user);
+            
+            // Returnerer HTTP 200 OK med token og brugerinformation
+            return Ok(new { 
+                token = token, 
+                role = "user", // Simpel rolle-angivelse, kan udvides
+                userId = user.User_ID,
+                subscription = user.Subscription
+            });
         }
+
+        // HENT BRUGERPROFIL
+        [Authorize] // Kræver gyldigt JWT token for adgang
+        [HttpGet("profile")] // HTTP GET endpoint: api/user/profile
+        public async Task<IActionResult> GetProfile()
+        {
+            // Henter User ID fra claims i det medsendte JWT token (NameIdentifier er standard claim type for ID)
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            
+            // Validerer at User ID claim findes og kan fortolkes til et heltal
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int id))
+                return Unauthorized("Ugyldig token eller manglende User ID claim"); // HTTP 401 hvis token er ugyldigt
+                
+            var user = await _ctx.Users.FindAsync(id); // Henter brugerdata asynkront baseret på ID
+            if (user == null)
+                return NotFound("Bruger ikke fundet"); // HTTP 404 hvis brugeren ikke findes i DB
+                
+            // Returnerer HTTP 200 OK med udvalgte brugeroplysninger (undgår at sende PasswordHash)
+            return Ok(new {
+                user.User_ID,
+                user.UserName,
+                user.Subscription,
+                user.Plants_amount
+            });
+        }
+
+        // LISTE (admin) - NB: Denne er ikke [Authorize] og bør sikres yderligere i en produktionsapp!
+        [HttpGet] // HTTP GET endpoint: api/user
+        public async Task<IActionResult> GetAll() =>
+            Ok(await _ctx.Users
+                         .Select(u => new // Projicerer til et anonymt objekt for at undgå at sende PasswordHash
+                         {
+                             u.User_ID,
+                             u.UserName,
+                             u.Subscription,
+                             u.Plants_amount
+                         })
+                         .ToListAsync());
+
+        // Simpel SHA-256 hash funktion til adgangskoder. 
+        // Overvej stærkere hashing (fx Argon2, scrypt) og salt i en produktionsapplikation.
+        private static string Hash(string text)
+        {
+            using var sha = SHA256.Create(); // Opretter en SHA256 hash-instans
+            // Konverterer input-strengen til bytes, beregner hash, og konverterer hash-bytes til hex-string
+            return Convert.ToHexString(sha.ComputeHash(Encoding.UTF8.GetBytes(text)));
+        }
+    }
+
+    // Data Transfer Objects (DTOs) for brugerregistrering og login
+    public class UserRegisterDto
+    {
+        public required string UserName { get; set; }
+        public required string Password { get; set; }
+        public string Subscription { get; set; } = "Free"; // Default abonnement
+    }
+
+    public class UserLoginDto
+    {
+        public required string UserName { get; set; }
+        public required string Password { get; set; }
     }
 }
