@@ -1,30 +1,33 @@
-﻿using System;
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace PlantHomie.API.Models
 {
-    public class Notification
+    public class Plant
     {
         [Key]
-        public int Notification_ID { get; set; }
-
-        public DateTime Dato_Tid { get; set; }
-
-        [StringLength(50)]
-        public string? Plant_Type { get; set; }
-
         public int Plant_ID { get; set; }
 
+        [Required]
+        [StringLength(50)]
+        public string Plant_Name { get; set; } = string.Empty;
+
+        [StringLength(50)]
+        public string Plant_type { get; set; } = string.Empty;
+
+        [StringLength(255)]
+        public string? ImageUrl { get; set; }
+        
+        // Påkrævet for frontend kode
         public int User_ID { get; set; }
-
-        // Navigation property der repræsenterer den tilknyttede plante.
-        // "?" betyder at denne relation er valgfri (kan være null, fx hvis planten ikke er hentet med fra databasen).
-        // ForeignKey-attributten sikrer, at EF Core bruger Plant_ID som forbindelsen til Plant-tabellen.
-        [ForeignKey("Plant_ID")]
-        public Plant? Plant { get; set; }
-
+        
         [ForeignKey("User_ID")]
         public User? User { get; set; }
+        
+        // Navigeringsegenskab for PlantLogs
+        public ICollection<PlantLog> PlantLogs { get; set; } = new List<PlantLog>();
+        
+        // Navigeringsegenskab for Notifications
+        public ICollection<Notification> Notifications { get; set; } = new List<Notification>();
     }
 }

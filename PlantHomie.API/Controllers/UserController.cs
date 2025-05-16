@@ -25,16 +25,16 @@ namespace PlantHomie.API.Controllers
         }
 
         // REGISTRERING
-        [HttpPost("register")] // HTTP POST endpoint: api/user/register
+        [HttpPost("register")] // HTTP POST slutpunkt: api/user/register
         public async Task<IActionResult> Register(UserRegisterDto dto)
         {
             // Valider at den modtagne krop indeholder et gyldigt UserRegisterDto-objekt
             if (dto is null || string.IsNullOrEmpty(dto.UserName) || string.IsNullOrEmpty(dto.Password))
-                return BadRequest("Brugernavn og adgangskode skal udfyldes.");
+                return BadRequest("Username and password are required.");
 
             // Tjek om brugernavnet allerede findes i databasen
             if (await _ctx.Users.AnyAsync(u => u.UserName == dto.UserName))
-                return Conflict("Dette brugernavn er allerede i brug.");
+                return Conflict("This username is already in use.");
 
             // Opret ny User med data fra DTO'en
             var user = new User
@@ -63,9 +63,9 @@ namespace PlantHomie.API.Controllers
                 {
                     // Tjek constraint-navn for at give korrekt besked
                     if (sqlEx.Message.Contains("PK__User")) // Primær nøglebegrænsning (User_ID)
-                        return BadRequest("En bruger med dette ID eksisterer allerede. Vælg et andet ID.");
+                        return BadRequest("A user with this ID already exists. Please choose another ID.");
                     if (sqlEx.Message.Contains("UQ__User__Email") || sqlEx.Message.Contains("UQ__User__") || sqlEx.Message.Contains("UQ_User_Email")) // Unik begrænsning på Email
-                        return BadRequest("En bruger med denne email eksisterer allerede. Vælg en anden email.");
+                        return BadRequest("A user with this email already exists. Please choose another email.");
                 }
                 throw; // Hvis det ikke er en unik begrænsningsovertrædelse, håndteres det på en anden måde
             }
@@ -81,9 +81,17 @@ namespace PlantHomie.API.Controllers
                 subscription = user.Subscription
             });
         }
+        
+        // REGISTRERING (Alias for frontend compatibility)
+        [HttpPost("signup")] // HTTP POST slutpunkt: api/user/signup
+        public async Task<IActionResult> Signup(UserRegisterDto dto)
+        {
+            // Forward to the register endpoint
+            return await Register(dto);
+        }
 
         // LOGIN
-        [HttpPost("login")] // HTTP POST endpoint: api/user/login
+        [HttpPost("login")] // HTTP POST slutpunkt: api/user/login
         public async Task<IActionResult> Login(UserLoginDto dto)
         {
             // Forsøger at hente brugeren fra databasen baseret på brugernavn
@@ -92,7 +100,7 @@ namespace PlantHomie.API.Controllers
 
             // Hvis brugeren ikke findes eller hashet password ikke matcher, returneres HTTP 401 Unauthorized
             if (user is null || user.PasswordHash != Hash(dto.Password))
-                return Unauthorized("Ugyldige loginoplysninger.");
+                return Unauthorized("Invalid login credentials.");
 
             // Bruger JwtService til at generere et JWT token for den autentificerede bruger
             var token = _jwtService.GenerateToken(user);
@@ -108,7 +116,7 @@ namespace PlantHomie.API.Controllers
 
         // HENT BRUGERPROFIL
         [Authorize] // Kræver gyldigt JWT token for adgang
-        [HttpGet("profile")] // HTTP GET endpoint: api/user/profile
+        [HttpGet("profile")] // HTTP GET slutpunkt: api/user/profile
         public async Task<IActionResult> GetProfile()
         {
             // Henter User ID fra claims i det medsendte JWT token (NameIdentifier er standard claim type for ID)
@@ -116,11 +124,11 @@ namespace PlantHomie.API.Controllers
             
             // Validerer at User ID claim findes og kan fortolkes til et heltal
             if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int id))
-                return Unauthorized("Ugyldig token eller manglende User ID claim"); // HTTP 401 hvis token er ugyldigt
+                return Unauthorized("Invalid token or missing User ID claim"); // HTTP 401 hvis token er ugyldigt
                 
             var user = await _ctx.Users.FindAsync(id); // Henter brugerdata asynkront baseret på ID
             if (user == null)
-                return NotFound("Bruger ikke fundet"); // HTTP 404 hvis brugeren ikke findes i DB
+                return NotFound("User not found"); // HTTP 404 hvis brugeren ikke findes i DB
                 
             // Returnerer HTTP 200 OK med udvalgte brugeroplysninger (undgår at sende PasswordHash)
             return Ok(new {
@@ -132,7 +140,7 @@ namespace PlantHomie.API.Controllers
         }
 
         // LISTE (admin) - NB: Denne er ikke [Authorize] og bør sikres yderligere i en produktionsapp!
-        [HttpGet] // HTTP GET endpoint: api/user
+        [HttpGet] // HTTP GET slutpunkt: api/user
         public async Task<IActionResult> GetAll() =>
             Ok(await _ctx.Users
                          .Select(u => new // Projicerer til et anonymt objekt for at undgå at sende PasswordHash
