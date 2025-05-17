@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PlantHomie.API.Data;
@@ -115,8 +115,7 @@ namespace PlantHomie.API.Controllers
 
             if (!string.IsNullOrEmpty(plant.ImageUrl))
             {
-                var path = Path.Combine(_env.WebRootPath ?? "wwwroot",
-                                        plant.ImageUrl.TrimStart('/'));
+                var path = Path.Combine(_env.WebRootPath ?? "wwwroot", plant.ImageUrl.TrimStart('/'));
                 if (System.IO.File.Exists(path))
                     System.IO.File.Delete(path);
             }

@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace PlantHomie.API.Models
@@ -21,7 +21,7 @@ namespace PlantHomie.API.Models
 
         public int? Plants_amount { get; set; }
 
-        //Hvis AutoMode er slået til så kan user ikke forstyrres, kun alvorlige notifikationer bliver sendt
+        // Hvis AutoMode er slået til så kan user ikke forstyrres, kun alvorlige notifikationer bliver sendt
         [NotMapped]
         public bool AutoMode { get; set; } = true;
 
