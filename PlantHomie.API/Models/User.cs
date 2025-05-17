@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace PlantHomie.API.Models
 {
@@ -15,17 +16,15 @@ namespace PlantHomie.API.Models
         [StringLength(200)]
         public string PasswordHash { get; set; } = string.Empty;
 
-        [Required]
-        [StringLength(50)]
-        public string Email { get; set; } = string.Empty;
-
-        public string? Information { get; set; } // -- der er ikke NOT NULL her
-
         [StringLength(20)]
         public string Subscription { get; set; } = "Free";
 
         public int? Plants_amount { get; set; }
-        
+
+        // Hvis AutoMode er slået til så kan user ikke forstyrres, kun alvorlige notifikationer bliver sendt
+        [NotMapped]
+        public bool AutoMode { get; set; } = true;
+
         // Navigeringsegenskaber
         public ICollection<Plant> Plants { get; set; } = new List<Plant>();
         public ICollection<Notification> Notifications { get; set; } = new List<Notification>();

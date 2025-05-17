@@ -1,17 +1,14 @@
-﻿-- Brugere
+-- 1) Brugere
 CREATE TABLE dbo.[User] (
     User_ID        INT          IDENTITY(1,1) PRIMARY KEY,
     UserName       VARCHAR(50)  NOT NULL UNIQUE,
     PasswordHash   VARCHAR(200) NOT NULL,
-    Subscription   VARCHAR(20)  NOT NULL,     -- Free / Premium_…
-    Plants_amount  INT          NULL          -- udfyldes i API'et
+    Subscription   VARCHAR(20)  NOT NULL,  -- Free / Premium_…
+    Plants_amount  INT          NULL,
+    AutoMode       BIT          NOT NULL DEFAULT 1
 );
-GO
 
-
-
-
--- 2)   Planter
+-- 2) Planter
 CREATE TABLE dbo.Plant (
     Plant_ID     INT            IDENTITY(1,1) PRIMARY KEY,
     Plant_Name   VARCHAR(50)    UNIQUE,
@@ -22,8 +19,7 @@ CREATE TABLE dbo.Plant (
         REFERENCES dbo.[User] (User_ID) ON DELETE CASCADE
 );
 
-
--- 3)   Plantelog (sensor-målinger)
+-- 3) Plantelog (sensor-målinger)
 CREATE TABLE dbo.PlantLog (
     PlantLog_ID       INT IDENTITY(1,1) PRIMARY KEY,
     Plant_ID          INT          NOT NULL,
@@ -36,8 +32,7 @@ CREATE TABLE dbo.PlantLog (
         REFERENCES dbo.Plant (Plant_ID) ON DELETE CASCADE
 );
 
-
--- 4)   Notifikationer
+-- 4) Notifikationer
 CREATE TABLE dbo.Notification (
     Notification_ID INT         IDENTITY(1,1) PRIMARY KEY,
     Dato_Tid        DATETIME     DEFAULT(GETUTCDATE()),
@@ -47,28 +42,24 @@ CREATE TABLE dbo.Notification (
     CONSTRAINT FK_Notification_Plant FOREIGN KEY (Plant_ID)
         REFERENCES dbo.Plant (Plant_ID) ON DELETE CASCADE,
     CONSTRAINT FK_Notification_User  FOREIGN KEY (User_ID)
-        REFERENCES dbo.[User] (User_ID) ON DELETE CASCADE
+        REFERENCES dbo.[User] (User_ID) ON DELETE NO ACTION
 );
 
-
-   --5)   (Valgfrit) Seed et par rækker til test
-
-INSERT INTO dbo.[User] (UserName, PasswordHash, Subscription, Plants_amount)
+-- 5) (Valgfrit) Seed et par rækker til test
+INSERT INTO dbo.[User] (UserName, PasswordHash, Subscription, Plants_amount, AutoMode)
 VALUES (
     'dummyuser',
     'abc123hashedpassword',  -- Antag en hash; brug en rigtig hashing-funktion i praksis
     'Free',
-    10
+    10,
+    1
 );
 
 INSERT INTO dbo.Plant (Plant_Name, Plant_type, User_ID)
 VALUES ('Test Plant', 'Dummy', 1);
--- Plant_ID bliver 1, hvis tabellen var tom
 
-
-INSERT dbo.Plant (Plant_Name, Plant_type, User_ID)
+INSERT INTO dbo.Plant (Plant_Name, Plant_type, User_ID)
 VALUES ('Demo Plant', 'Succulent', 1);
 
-INSERT dbo.PlantLog (Plant_ID, TemperatureLevel, WaterLevel, AirHumidityLevel)
+INSERT INTO dbo.PlantLog (Plant_ID, TemperatureLevel, WaterLevel, AirHumidityLevel)
 VALUES (1, 21.5, 45.0, 55.0);
-GO

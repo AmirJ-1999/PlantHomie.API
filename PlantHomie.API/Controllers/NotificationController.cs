@@ -26,7 +26,7 @@ namespace PlantHomie.API.Controllers
         {
             if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int userId))
                 return Unauthorized("Invalid token or missing User ID claim.");
-                
+
             var notifications = _context.Notifications
                 .Include(n => n.Plant)
                 .Include(n => n.User)
@@ -47,18 +47,18 @@ namespace PlantHomie.API.Controllers
         {
             if (notification == null)
                 return BadRequest("Data is missing.");
-                
+
             if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int userId))
                 return Unauthorized("Invalid token or missing User ID claim.");
 
             if (!_context.Plants.Any(p => p.Plant_ID == notification.Plant_ID))
                 return BadRequest("Plant_ID not found in database.");
 
-            // Check if user owns this plant
+            // Tjek om brugeren ejer denne plante
             var plant = _context.Plants.FirstOrDefault(p => p.Plant_ID == notification.Plant_ID);
             if (plant == null)
                 return BadRequest("Plant not found.");
-                
+
             if (plant.User_ID != userId)
                 return Forbid("You do not have permission to create notifications for this plant.");
 
@@ -83,7 +83,7 @@ namespace PlantHomie.API.Controllers
         {
             if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int userId))
                 return Unauthorized("Invalid token or missing User ID claim.");
-                
+
             var latestNotification = _context.Notifications
                 .Where(n => n.User_ID == userId)
                 .OrderByDescending(n => n.Dato_Tid)
@@ -96,6 +96,3 @@ namespace PlantHomie.API.Controllers
         }
     }
 }
-
-
-

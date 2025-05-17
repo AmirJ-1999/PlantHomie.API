@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PlantHomie.API.Data;
@@ -29,7 +29,7 @@ namespace PlantHomie.API.Controllers
         {
             if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int userId))
                 return Unauthorized("Invalid token or missing User ID claim.");
-                
+
             return Ok(_context.Plants
                         .Where(p => p.User_ID == userId)
                         .OrderBy(p => p.Plant_Name)
@@ -43,7 +43,7 @@ namespace PlantHomie.API.Controllers
         {
             if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int userId))
                 return Unauthorized("Invalid token or missing User ID claim.");
-                
+
             var latest = _context.Plants
                                .Where(p => p.User_ID == userId)
                                .OrderByDescending(p => p.Plant_ID)
@@ -63,7 +63,7 @@ namespace PlantHomie.API.Controllers
 
             if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int userId))
                 return Unauthorized("Invalid token or missing User ID claim.");
-                
+
             if (data.User_ID != 0 && data.User_ID != userId)
                 return BadRequest("Cannot create plants for other users. User_ID from token will be used.");
 
@@ -106,7 +106,7 @@ namespace PlantHomie.API.Controllers
         {
             if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int userId))
                 return Unauthorized("Invalid token or missing User ID claim.");
-                
+
             var plant = await _context.Plants.FindAsync(id);
             if (plant is null) return NotFound();
 
@@ -115,8 +115,7 @@ namespace PlantHomie.API.Controllers
 
             if (!string.IsNullOrEmpty(plant.ImageUrl))
             {
-                var path = Path.Combine(_env.WebRootPath ?? "wwwroot",
-                                        plant.ImageUrl.TrimStart('/'));
+                var path = Path.Combine(_env.WebRootPath ?? "wwwroot", plant.ImageUrl.TrimStart('/'));
                 if (System.IO.File.Exists(path))
                     System.IO.File.Delete(path);
             }

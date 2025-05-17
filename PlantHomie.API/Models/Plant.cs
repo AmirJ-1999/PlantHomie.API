@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace PlantHomie.API.Models
@@ -17,16 +17,16 @@ namespace PlantHomie.API.Models
 
         [StringLength(255)]
         public string? ImageUrl { get; set; }
-        
+
         // Påkrævet for frontend kode
         public int User_ID { get; set; }
-        
+
         [ForeignKey("User_ID")]
         public User? User { get; set; }
-        
+
         // Navigeringsegenskab for PlantLogs
         public ICollection<PlantLog> PlantLogs { get; set; } = new List<PlantLog>();
-        
+
         // Navigeringsegenskab for Notifications
         public ICollection<Notification> Notifications { get; set; } = new List<Notification>();
     }
