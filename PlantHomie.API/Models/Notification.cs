@@ -9,13 +9,15 @@ namespace PlantHomie.API.Models
         [Key]
         public int Notification_ID { get; set; }
 
-        public DateTime Dato_Tid { get; set; }
+        public DateTime Dato_Tid { get; set; } = DateTime.UtcNow;
 
         [StringLength(50)]
         public string? Plant_Type { get; set; }
 
+        [Required]
         public int Plant_ID { get; set; }
 
+        [Required]
         public int User_ID { get; set; }
 
         // Navigation property der repræsenterer den tilknyttede plante.
@@ -24,6 +26,8 @@ namespace PlantHomie.API.Models
         [ForeignKey("Plant_ID")]
         public Plant? Plant { get; set; }
 
+        // Navigation property der repræsenterer den tilknyttede bruger.
+        // ForeignKey-attributten sikrer, at EF Core bruger User_ID som forbindelsen til User-tabellen.
         [ForeignKey("User_ID")]
         public User? User { get; set; }
     }

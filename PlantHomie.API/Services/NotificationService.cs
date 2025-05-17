@@ -25,7 +25,7 @@ namespace PlantHomie.API.Services
                 soil < 10 || soil > 90 ||
                 humidity < 20 || humidity > 80;
 
-            // Since AutoMode is [NotMapped], we'll only send notifications for critical conditions
+            // Da AutoMode er [NotMapped], sender vi kun notifikationer for kritiske forhold
             if (critical)
             {
                 var notification = new Notification

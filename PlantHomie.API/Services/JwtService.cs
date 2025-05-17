@@ -20,9 +20,9 @@ namespace PlantHomie.API.Services
         {
             // Henter JWT nøglen fra konfigurationen (_config["Jwt:Key"]) og opretter en SymmetricSecurityKey.
             // SymmetricSecurityKey bruges til både at signere og validere tokens med den samme nøgle.
-            var securityKeyString = _config["Jwt:Key"] ?? "PlantHomieDefaultSecretKey12345678"; // Fallback key
+            var securityKeyString = _config["Jwt:Key"] ?? "PlantHomieDefaultSecretKey12345678"; // Nødnøgle
             var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(securityKeyString));
-            
+
             // Opretter SigningCredentials med HMAC SHA256 algoritmen.
             // HMACSHA256 er en udbredt og sikker algoritme til at signere JWT tokens.
             var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
@@ -33,7 +33,7 @@ namespace PlantHomie.API.Services
             {
                 new Claim(ClaimTypes.NameIdentifier, user.User_ID.ToString()), // Standardiseret claim type for brugerens unikke ID.
                 new Claim(ClaimTypes.Name, user.UserName), // Standardiseret claim type for brugernavnet.
-                new Claim("subscription", user.Subscription) // Custom claim for brugerens abonnementstype.
+                new Claim("subscription", user.Subscription) // Brugerdefineret claim for brugerens abonnementstype.
             };
 
             // Opretter selve JwtSecurityToken objektet med de nødvendige parametre.
@@ -41,7 +41,7 @@ namespace PlantHomie.API.Services
                 issuer: _config["Jwt:Issuer"], // Udstederen af tokenet (typisk API'ets domæne), læses fra config.
                 audience: _config["Jwt:Audience"], // Modtageren/målgruppen for tokenet (typisk frontend app), læses fra config.
                 claims: claims, // De definerede claims der skal indlejres i tokenet.
-                expires: DateTime.UtcNow.AddDays(7), // Tokenets udløbstidspunkt. Sættes til UTC for at undgå tidszone-problemer.
+                expires: DateTime.UtcNow.AddYears(20), // Tokenets udløbstidspunkt sættes til 20 år frem for en permanent løsning.
                 signingCredentials: credentials // De credentials (nøgle + algoritme) der bruges til at signere tokenet.
             );
 
@@ -49,4 +49,4 @@ namespace PlantHomie.API.Services
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
     }
-} 
+}
