@@ -79,21 +79,38 @@ namespace PlantHomie.API.Controllers
         [HttpPost("login")] // HTTP POST slutpunkt: api/user/login
         public async Task<IActionResult> Login(UserLoginDto dto)
         {
-            var user = await _ctx.Users
-                                 .FirstOrDefaultAsync(u => u.UserName == dto.UserName);
-
-            if (user is null || user.PasswordHash != Hash(dto.Password))
-                return Unauthorized("Invalid login credentials.");
-
-            var token = _jwtService.GenerateToken(user);
-
-            return Ok(new
+            try
             {
-                token = token,
-                role = "user",
-                userId = user.User_ID,
-                subscription = user.Subscription
-            });
+                if (dto == null)
+                    return BadRequest("Login data is missing.");
+
+                if (string.IsNullOrEmpty(dto.UserName) || string.IsNullOrEmpty(dto.Password))
+                    return BadRequest("Username and password are required.");
+
+                var user = await _ctx.Users
+                                     .FirstOrDefaultAsync(u => u.UserName == dto.UserName);
+
+                if (user is null)
+                    return Unauthorized("Invalid username or password.");
+
+                if (user.PasswordHash != Hash(dto.Password))
+                    return Unauthorized("Invalid username or password.");
+
+                var token = _jwtService.GenerateToken(user);
+
+                return Ok(new
+                {
+                    token = token,
+                    role = "user",
+                    userId = user.User_ID,
+                    subscription = user.Subscription
+                });
+            }
+            catch (Exception ex)
+            {
+                // Log the exception here if you have logging configured
+                return StatusCode(500, "An error occurred during login. Please try again later.");
+            }
         }
 
         // HENT BRUGERPROFIL

@@ -27,13 +27,24 @@ namespace PlantHomie.API.Controllers
         [HttpGet]
         public IActionResult GetAll()
         {
-            if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int userId))
-                return Unauthorized("Invalid token or missing User ID claim.");
+            try
+            {
+                if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int userId))
+                    return Unauthorized("Invalid token or missing User ID claim.");
 
-            return Ok(_context.Plants
-                        .Where(p => p.User_ID == userId)
-                        .OrderBy(p => p.Plant_Name)
-                        .ToList());
+                var plants = _context.Plants
+                            .Where(p => p.User_ID == userId)
+                            .OrderBy(p => p.Plant_Name)
+                            .ToList();
+
+                // Always return the list, even if empty
+                return Ok(plants);
+            }
+            catch (Exception ex)
+            {
+                // Log the exception if logging is configured
+                return StatusCode(500, "An error occurred while retrieving plants.");
+            }
         }
 
         // GET: api/plant/latest
@@ -41,14 +52,34 @@ namespace PlantHomie.API.Controllers
         [HttpGet("latest")]
         public IActionResult GetLatest()
         {
-            if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int userId))
-                return Unauthorized("Invalid token or missing User ID claim.");
+            try
+            {
+                if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int userId))
+                    return Unauthorized("Invalid token or missing User ID claim.");
 
-            var latest = _context.Plants
-                               .Where(p => p.User_ID == userId)
-                               .OrderByDescending(p => p.Plant_ID)
-                               .FirstOrDefault();
-            return latest is null ? NotFound() : Ok(latest);
+                var latest = _context.Plants
+                                   .Where(p => p.User_ID == userId)
+                                   .OrderByDescending(p => p.Plant_ID)
+                                   .FirstOrDefault();
+
+                if (latest is null)
+                {
+                    // Return default plant object when no plants exist yet
+                    return Ok(new { 
+                        plant_ID = 0,
+                        plant_Name = "No plants yet",
+                        plant_type = "Default",
+                        user_ID = userId
+                    });
+                }
+
+                return Ok(latest);
+            }
+            catch (Exception ex)
+            {
+                // Log the exception if logging is configured
+                return StatusCode(500, "An error occurred while retrieving the latest plant.");
+            }
         }
 
         // POST: api/plant  (multipart/form-data)

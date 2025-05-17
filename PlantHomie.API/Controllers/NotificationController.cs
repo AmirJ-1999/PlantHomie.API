@@ -24,20 +24,26 @@ namespace PlantHomie.API.Controllers
         [HttpGet]
         public IActionResult GetAll()
         {
-            if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int userId))
-                return Unauthorized("Invalid token or missing User ID claim.");
+            try
+            {
+                if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int userId))
+                    return Unauthorized("Invalid token or missing User ID claim.");
 
-            var notifications = _context.Notifications
-                .Include(n => n.Plant)
-                .Include(n => n.User)
-                .Where(n => n.User_ID == userId)
-                .OrderByDescending(n => n.Dato_Tid)
-                .ToList();
+                var notifications = _context.Notifications
+                    .Include(n => n.Plant)
+                    .Include(n => n.User)
+                    .Where(n => n.User_ID == userId)
+                    .OrderByDescending(n => n.Dato_Tid)
+                    .ToList();
 
-            if (!notifications.Any())
-                return NotFound("No notifications found.");
-
-            return Ok(notifications);
+                // Return empty array instead of 404 when no notifications exist
+                return Ok(notifications);
+            }
+            catch (Exception ex)
+            {
+                // Log the exception if logging is configured
+                return StatusCode(500, "An error occurred while retrieving notifications.");
+            }
         }
 
         // POST: api/notification
@@ -81,18 +87,34 @@ namespace PlantHomie.API.Controllers
         [HttpGet("latest")]
         public IActionResult GetLatest()
         {
-            if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int userId))
-                return Unauthorized("Invalid token or missing User ID claim.");
+            try
+            {
+                if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int userId))
+                    return Unauthorized("Invalid token or missing User ID claim.");
 
-            var latestNotification = _context.Notifications
-                .Where(n => n.User_ID == userId)
-                .OrderByDescending(n => n.Dato_Tid)
-                .FirstOrDefault();
+                var latestNotification = _context.Notifications
+                    .Where(n => n.User_ID == userId)
+                    .OrderByDescending(n => n.Dato_Tid)
+                    .FirstOrDefault();
 
-            if (latestNotification == null)
-                return NotFound("No notifications found.");
+                if (latestNotification == null)
+                {
+                    // Return empty object instead of 404 when no notifications exist
+                    return Ok(new { 
+                        notification_ID = 0,
+                        message = "No notifications yet",
+                        type = "System",
+                        dato_Tid = DateTime.UtcNow
+                    });
+                }
 
-            return Ok(latestNotification);
+                return Ok(latestNotification);
+            }
+            catch (Exception ex)
+            {
+                // Log the exception if logging is configured
+                return StatusCode(500, "An error occurred while retrieving the latest notification.");
+            }
         }
     }
 }
