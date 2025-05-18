@@ -63,3 +63,9 @@ VALUES ('Demo Plant', 'Succulent', 1);
 
 INSERT INTO dbo.PlantLog (Plant_ID, TemperatureLevel, WaterLevel, AirHumidityLevel)
 VALUES (1, 21.5, 45.0, 55.0);
+
+
+ALTER TABLE dbo.Notification
+ADD Message NVARCHAR(250) NULL;
+
+ALTER TABLE dbo.Notification DROP COLUMN Message;

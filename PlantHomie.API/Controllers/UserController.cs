@@ -8,6 +8,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using PlantHomie.API.Services;
+using System.Text.Json;
 
 namespace PlantHomie.API.Controllers
 {
@@ -91,10 +92,10 @@ namespace PlantHomie.API.Controllers
                                      .FirstOrDefaultAsync(u => u.UserName == dto.UserName);
 
                 if (user is null)
-                    return Unauthorized("Invalid username or password.");
+                    return Unauthorized("Invalid username or password. Please check your credentials and try again.");
 
                 if (user.PasswordHash != Hash(dto.Password))
-                    return Unauthorized("Invalid username or password.");
+                    return Unauthorized("Invalid username or password. Please check your credentials and try again.");
 
                 var token = _jwtService.GenerateToken(user);
 
@@ -106,9 +107,20 @@ namespace PlantHomie.API.Controllers
                     subscription = user.Subscription
                 });
             }
-            catch (Exception ex)
+            catch (DbUpdateException ex)
             {
-                // Log the exception here if you have logging configured
+                if (ex.InnerException is SqlException sqlEx && sqlEx.Number == 2627)
+                {
+                    if (sqlEx.Message.Contains("PK__User"))
+                        return BadRequest("A user with this ID already exists. Please choose another ID.");
+                    if (sqlEx.Message.Contains("UQ__User__Email") || sqlEx.Message.Contains("UQ__User__") || sqlEx.Message.Contains("UQ_User_Email"))
+                        return BadRequest("A user with this email already exists. Please choose another email.");
+                }
+                throw;
+            }
+            catch (Exception)
+            {
+                // Log undtagelsen hvis logning er konfigureret
                 return StatusCode(500, "An error occurred during login. Please try again later.");
             }
         }
@@ -121,11 +133,11 @@ namespace PlantHomie.API.Controllers
             var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int id))
-                return Unauthorized("Invalid token or missing User ID claim");
+                return Unauthorized("Invalid or missing authentication token. Please login first to obtain a valid JWT token and include it in the Authorization header.");
 
             var user = await _ctx.Users.FindAsync(id);
             if (user == null)
-                return NotFound("User not found");
+                return NotFound("User not found.");
 
             return Ok(new
             {
@@ -149,6 +161,88 @@ namespace PlantHomie.API.Controllers
                          })
                          .ToListAsync());
 
+        // OPDATER SUBSCRIPTION - PUT: api/user/{id}
+        [Authorize]
+        [HttpPut("{id:int}")]
+        public async Task<IActionResult> UpdateSubscription(int id, [FromBody] UserUpdateDto dto)
+        {
+            try
+            {
+                // Tjek om brugeren er autoriseret til at opdatere denne bruger
+                if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int currentUserId))
+                    return Unauthorized("Invalid or missing authentication token. Please login first to obtain a valid JWT token and include it in the Authorization header.");
+
+                // Kun tillad brugere at opdatere deres egen profil
+                if (currentUserId != id)
+                    return Forbid("You can only update your own subscription.");
+
+                var user = await _ctx.Users.FindAsync(id);
+                if (user == null)
+                    return NotFound("User not found.");
+
+                // Opdater abonnement
+                if (!string.IsNullOrEmpty(dto.Subscription))
+                {
+                    // Valider at abonnementstypen er gyldig
+                    if (dto.Subscription != "Free" && 
+                        dto.Subscription != "Premium_Silver" && 
+                        dto.Subscription != "Premium_Gold" && 
+                        dto.Subscription != "Premium_Plat")
+                    {
+                        return BadRequest("Invalid subscription type specified.");
+                    }
+
+                    user.Subscription = dto.Subscription;
+                    user.Plants_amount = dto.Subscription switch
+                    {
+                        "Premium_Silver" => 30,
+                        "Premium_Gold" => 50,
+                        "Premium_Plat" => 100,
+                        _ => 10
+                    };
+                }
+
+                await _ctx.SaveChangesAsync();
+
+                return Ok(new { 
+                    message = "User subscription updated successfully", 
+                    user_ID = user.User_ID,
+                    subscription = user.Subscription,
+                    plants_amount = user.Plants_amount
+                });
+            }
+            catch (Exception)
+            {
+                // Log undtagelsen hvis logning er konfigureret
+                return StatusCode(500, "An error occurred while updating the user subscription.");
+            }
+        }
+
+        // HENT BRUGER VED ID
+        [HttpGet("{id:int}")]
+        public async Task<IActionResult> GetById(int id)
+        {
+            try
+            {
+                var user = await _ctx.Users.FindAsync(id);
+                if (user == null)
+                    return NotFound("User not found.");
+
+                return Ok(new
+                {
+                    user.User_ID,
+                    user.UserName,
+                    user.Subscription,
+                    user.Plants_amount
+                });
+            }
+            catch (Exception)
+            {
+                // Log undtagelsen hvis logning er konfigureret
+                return StatusCode(500, "An error occurred while retrieving the user.");
+            }
+        }
+
         private static string Hash(string text)
         {
             using var sha = SHA256.Create();
@@ -167,5 +261,10 @@ namespace PlantHomie.API.Controllers
     {
         public required string UserName { get; set; }
         public required string Password { get; set; }
+    }
+
+    public class UserUpdateDto
+    {
+        public string? Subscription { get; set; }
     }
 }

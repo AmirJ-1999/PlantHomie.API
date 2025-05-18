@@ -6,6 +6,7 @@ using PlantHomie.API.Models;
 using System.Security.Claims;
 using Swashbuckle.AspNetCore.Annotations;
 using System.IO;
+using System.Text.Json;
 
 namespace PlantHomie.API.Controllers
 {
@@ -30,19 +31,19 @@ namespace PlantHomie.API.Controllers
             try
             {
                 if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int userId))
-                    return Unauthorized("Invalid token or missing User ID claim.");
+                    return Unauthorized("Invalid or missing authentication token. Please login first to obtain a valid JWT token and include it in the Authorization header.");
 
                 var plants = _context.Plants
                             .Where(p => p.User_ID == userId)
                             .OrderBy(p => p.Plant_Name)
                             .ToList();
 
-                // Always return the list, even if empty
+                // Returner altid listen, også selvom den er tom
                 return Ok(plants);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                // Log the exception if logging is configured
+                // Log undtagelsen hvis logning er konfigureret
                 return StatusCode(500, "An error occurred while retrieving plants.");
             }
         }
@@ -55,7 +56,7 @@ namespace PlantHomie.API.Controllers
             try
             {
                 if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int userId))
-                    return Unauthorized("Invalid token or missing User ID claim.");
+                    return Unauthorized("Invalid or missing authentication token. Please login first to obtain a valid JWT token and include it in the Authorization header.");
 
                 var latest = _context.Plants
                                    .Where(p => p.User_ID == userId)
@@ -64,7 +65,7 @@ namespace PlantHomie.API.Controllers
 
                 if (latest is null)
                 {
-                    // Return default plant object when no plants exist yet
+                    // Returner standard planteobjekt når ingen planter eksisterer endnu
                     return Ok(new { 
                         plant_ID = 0,
                         plant_Name = "No plants yet",
@@ -75,9 +76,9 @@ namespace PlantHomie.API.Controllers
 
                 return Ok(latest);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                // Log the exception if logging is configured
+                // Log undtagelsen hvis logning er konfigureret
                 return StatusCode(500, "An error occurred while retrieving the latest plant.");
             }
         }
@@ -93,7 +94,7 @@ namespace PlantHomie.API.Controllers
                 return BadRequest("Data is missing.");
 
             if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int userId))
-                return Unauthorized("Invalid token or missing User ID claim.");
+                return Unauthorized("Invalid or missing authentication token. Please login first to obtain a valid JWT token and include it in the Authorization header.");
 
             if (data.User_ID != 0 && data.User_ID != userId)
                 return BadRequest("Cannot create plants for other users. User_ID from token will be used.");
@@ -136,7 +137,7 @@ namespace PlantHomie.API.Controllers
         public async Task<IActionResult> Delete(int id)
         {
             if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int userId))
-                return Unauthorized("Invalid token or missing User ID claim.");
+                return Unauthorized("Invalid or missing authentication token. Please login first to obtain a valid JWT token and include it in the Authorization header.");
 
             var plant = await _context.Plants.FindAsync(id);
             if (plant is null) return NotFound();
