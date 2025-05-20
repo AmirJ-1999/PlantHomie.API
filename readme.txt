@@ -1,10 +1,20 @@
 The backend swagger site: https://planthomieapi20250519212023-g3dxbqerfvhhf0a6.northeurope-01.azurewebsites.net/swagger/index.html
 The frontend: https://planthomie.z16.web.core.windows.net
 
-To use the swagger, the user needs to login or signup as a user, which the person will then get an Bearer token that gives you autorization to the rest of the models tied to the specific user.
+How to Use Swagger Authentication.
+To access the Swagger APIs, you must first log in or sign up. After doing so, you’ll receive a Bearer token. This token authorizes access to API models tied to your user account.
 
-When you login or signup you will get an token where you then have to click the authorize button where you will then input "Bearer (yourtoken)" and then authorize. Now you will be able to POST and GET
-APIs models from the swagger tied to the user.
+Authorize in Swagger
+Once you have your token:
 
-A reminder that the backend + sql is running on the azure with limited vcores, so the backend may be a bit slow on startup, which will prevent the frontend
-from getting an response, after 20 seconds.
+Click the "Authorize" button in Swagger.
+
+Enter your token in the format:
+Bearer your_token_here
+
+Click Authorize to confirm.
+
+You’ll now be able to use the POST and GET endpoints tied to your user.
+
+Performance Note
+The backend (including SQL) is hosted on Azure with limited vCores. As a result, it may take some time to start up. This can cause delayed responses from the frontend (timeouts may occur after ~20 seconds).
