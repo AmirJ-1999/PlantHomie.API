@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PlantHomie.API.Data;
 using PlantHomie.API.Models;
+using PlantHomie.API.Services;
 using System.Linq;
 using System.Security.Claims;
 using System.Text.Json;
@@ -14,16 +15,18 @@ namespace PlantHomie.API.Controllers
     public class PlantLogController : ControllerBase
     {
         private readonly PlantHomieContext _context;
+        private readonly PlantLogService _plantLogService;
 
-        public PlantLogController(PlantHomieContext context)
+        public PlantLogController(PlantHomieContext context, PlantLogService plantLogService)
         {
             _context = context;
+            _plantLogService = plantLogService;
         }
 
         // GET: api/plantlog
         [Authorize]
         [HttpGet]
-        public IActionResult Index([FromQuery] int? limit = null)
+        public async Task<IActionResult> Index([FromQuery] int? limit = null, [FromQuery] int? plantId = null)
         {
             try
             {
@@ -66,10 +69,24 @@ namespace PlantHomie.API.Controllers
                 }
 
                 // User has plants, proceed with real data
+                // First get the list of plants that this user owns
+                var userPlantIds = await _context.Plants
+                    .Where(p => p.User_ID == userId)
+                    .Select(p => p.Plant_ID)
+                    .ToListAsync();
+                
+                // Then only get logs for plants that this user owns
                 IQueryable<PlantLog> query = _context.PlantLogs
                                  .Include(p => p.Plant)
-                                 .Where(p => p.Plant != null && p.Plant.User_ID == userId)
-                            .OrderByDescending(p => p.Dato_Tid);
+                    .Where(p => userPlantIds.Contains(p.Plant_ID));
+                
+                // Add plant ID filter if provided
+                if (plantId.HasValue)
+                {
+                    query = query.Where(p => p.Plant_ID == plantId.Value);
+                }
+                
+                query = query.OrderByDescending(p => p.Dato_Tid);
                 
                 if (limit.HasValue)
                 {
@@ -300,6 +317,35 @@ namespace PlantHomie.API.Controllers
         public IActionResult GetSoilMoisture(int plantId) =>
             GetSingleValue(plantId, log => log.WaterLevel, "moisture");
 
+        // GET: api/plantlog/status/{plantId}
+        [Authorize]
+        [HttpGet("status/{plantId}")]
+        public async Task<IActionResult> GetPlantStatus(int plantId)
+        {
+            try 
+            {
+                if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int userId))
+                    return Unauthorized("Invalid or missing authentication token");
+                
+                // Check if the plant belongs to the current user
+                var plant = await _context.Plants.FindAsync(plantId);
+                if (plant == null)
+                    return NotFound($"Plant with ID {plantId} not found");
+                
+                if (plant.User_ID != userId)
+                    return Forbid("You do not have permission to access this plant");
+                
+                // Use PlantLogService to get the latest reading with plant status
+                var plantStatus = await _plantLogService.GetLatestReadingAsync(plantId, userId);
+                return Ok(plantStatus);
+            }
+            catch (Exception)
+            {
+                // Log the exception if logging is configured
+                return StatusCode(500, "An error occurred while retrieving plant status.");
+            }
+        }
+
         private IActionResult GetSingleValue(
             int plantId,
             Func<PlantLog, double?> selector,
@@ -310,13 +356,7 @@ namespace PlantHomie.API.Controllers
                 if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int userId))
                     return Unauthorized("Invalid or missing authentication token. Please login first to obtain a valid JWT token and include it in the Authorization header.");
 
-                // Tjek om dette er standard plante ID 1 for en ny bruger
-                // Hvis ingen planter eksisterer endnu, returner en standardværdi
-                if (plantId == 1 && !_context.Plants.Any(p => p.Plant_ID == plantId))
-                {
-                    return Ok(50.0); // Returner en standard mellemværdi (50%)
-                }
-
+                // Check if plant exists and belongs to user
                 var plant = _context.Plants.FirstOrDefault(p => p.Plant_ID == plantId);
                 if (plant == null)
                     return NotFound("Plant not found");
@@ -324,19 +364,24 @@ namespace PlantHomie.API.Controllers
                 if (plant.User_ID != userId)
                     return Forbid("You do not have permission to access this plant. It belongs to another user.");
 
-                var value = _context.PlantLogs
+                var latest = _context.PlantLogs
                                   .Where(p => p.Plant_ID == plantId)
                                   .OrderByDescending(p => p.Dato_Tid)
-                                  .Select(selector)
                                   .FirstOrDefault();
 
+                if (latest == null)
+                {
+                    return Ok(50.0); // Return a default value if no logs exist
+                }
+
+                var value = selector(latest);
                 return value.HasValue
                     ? Ok(value.Value)
-                    : Ok(50.0); // Returner en standardværdi hvis ingen logs eksisterer
+                    : Ok(50.0); // Return a default value if the selector returns null
             }
             catch (Exception)
             {
-                // Log undtagelsen hvis logning er konfigureret
+                // Log the exception if logging is configured
                 return StatusCode(500, $"An error occurred while retrieving {label} data.");
             }
         }
