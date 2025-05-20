@@ -84,18 +84,39 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         var secretKey = builder.Configuration["Jwt:Key"] ?? "PlantHomieDefaultSecretKey12345678";
         options.TokenValidationParameters = new TokenValidationParameters
         {
-            ValidateIssuer = true,
-            ValidateAudience = true,
+            ValidateIssuer = builder.Environment.IsProduction(),
+            ValidateAudience = builder.Environment.IsProduction(),
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
             ValidIssuer = builder.Configuration["Jwt:Issuer"],
             ValidAudience = builder.Configuration["Jwt:Audience"],
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
         };
+        
+        // Don't require HTTPS in development
+        if (!builder.Environment.IsProduction())
+        {
+            options.RequireHttpsMetadata = false;
+        }
 
         // Customize the authentication challenge handler
         options.Events = new JwtBearerEvents
         {
+            OnMessageReceived = context => 
+            {
+                Console.WriteLine($"JWT OnMessageReceived: {context.Request.Path}");
+                return Task.CompletedTask;
+            },
+            OnTokenValidated = context => 
+            {
+                Console.WriteLine($"JWT token validated successfully for: {context.Request.Path}");
+                return Task.CompletedTask;
+            },
+            OnAuthenticationFailed = context =>
+            {
+                Console.WriteLine($"JWT authentication failed for: {context.Request.Path}, Error: {context.Exception.Message}");
+                return Task.CompletedTask;
+            },
             OnChallenge = async context =>
             {
                 // Override the default 401 response with a JSON response
@@ -121,8 +142,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 // Tilføj CORS-understøttelse
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll", policy =>
+    options.AddDefaultPolicy(policy =>
     {
+        // Allow all origins for school project
         policy.AllowAnyOrigin()
               .AllowAnyMethod()
               .AllowAnyHeader();
@@ -131,6 +153,9 @@ builder.Services.AddCors(options =>
 
 // Tilføj custom services
 builder.Services.AddScoped<JwtService>();
+builder.Services.AddScoped<NotificationService>();
+builder.Services.AddScoped<PlantLogService>();
+builder.Services.AddScoped<RandomSensorDataService>();
 
 var app = builder.Build();
 
@@ -142,31 +167,71 @@ if (app.Environment.IsDevelopment() || app.Environment.IsProduction()) // Aktive
 }
 
 // Configure static file serving for uploads
-var uploadsPath = Path.Combine(Directory.GetCurrentDirectory(), "uploads");
+var uploadsPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
 if (!Directory.Exists(uploadsPath))
 {
     Directory.CreateDirectory(uploadsPath);
+    Console.WriteLine($"Created directory: {uploadsPath}");
 }
 
-// Konfigurer statiske filer for at servere uploadede billeder
-app.UseStaticFiles(); // Serverer filer fra wwwroot
-app.UseStaticFiles(new StaticFileOptions
+// Configure the upload directory inside wwwroot
+var wwwrootPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+if (!Directory.Exists(wwwrootPath))
 {
-    FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(uploadsPath),
-    RequestPath = "/uploads"
-}); // Serverer filer fra uploads-mappen
+    Directory.CreateDirectory(wwwrootPath);
+    Console.WriteLine($"Created directory: {wwwrootPath}");
+}
 
+// Configure static files to serve uploaded images
+app.UseStaticFiles(); // Serves files from wwwroot
+
+// CORS must be before authentication and HTTP redirection!
+app.UseCors();
+
+// Then handle HTTP redirection AFTER CORS
 app.UseHttpsRedirection();
-
-app.UseCors("AllowAll");
 
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Add a redirect from the root URL to Swagger
-app.MapGet("/", () => Results.Redirect("/swagger"));
+// Auto-redirect root to Swagger UI
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.Value == "/")
+    {
+        context.Response.Redirect("/swagger");
+        return;
+    }
+    
+    await next();
+});
 
 app.MapControllers();
+
+// Special debug endpoint for notifications
+app.MapPost("/api/test-notification", async (HttpContext context) =>
+{
+    try
+    {
+        // Read the request body
+        using var reader = new StreamReader(context.Request.Body);
+        var bodyJson = await reader.ReadToEndAsync();
+        
+        Console.WriteLine($"Received test notification: {bodyJson}");
+        
+        // Return success
+        context.Response.StatusCode = 200;
+        context.Response.ContentType = "application/json";
+        await context.Response.WriteAsync("{\"success\":true,\"message\":\"Test notification received\"}");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Error in test-notification: {ex.Message}");
+        context.Response.StatusCode = 500;
+        context.Response.ContentType = "application/json";
+        await context.Response.WriteAsync($"{{\"error\":\"Internal Server Error\",\"message\":\"{ex.Message}\"}}");
+    }
+});
 
 // Tilføj global exception handling
 app.Use(async (context, next) =>
@@ -181,6 +246,9 @@ app.Use(async (context, next) =>
         var logger = context.RequestServices.GetService<ILogger<Program>>();
         logger?.LogError(ex, "Unhandled exception in request pipeline");
         
+        Console.WriteLine($"Global exception handler caught: {ex.Message}");
+        Console.WriteLine($"Stack trace: {ex.StackTrace}");
+        
         // Returnér en passende JSON-fejlbesked
         context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
         context.Response.ContentType = "application/json";
@@ -188,7 +256,7 @@ app.Use(async (context, next) =>
         var response = new 
         { 
             error = "Internal Server Error", 
-            message = "An unexpected error occurred. Please try again later.",
+            message = $"An unexpected error occurred: {ex.Message}",
             status = 500 
         };
         
