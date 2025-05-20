@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -20,9 +20,15 @@ namespace PlantHomie.API.Models
         [StringLength(20)]
         public string? Plant_Type { get; set; }
 
-        [NotMapped]
+        [StringLength(20)]
+        public string? Type { get; set; } = "System";
+
         [StringLength(250)]
         public string? Message { get; set; }
+        
+        public bool IsRead { get; set; } = false;
+        
+        public string? NotificationType { get; set; } = "System";
 
         // Navigation property der repræsenterer den tilknyttede plante.
         // "?" betyder at denne relation er valgfri (kan være null, fx hvis planten ikke er hentet med fra databasen).
