@@ -23,6 +23,20 @@ namespace PlantHomie.API.Data
             modelBuilder.Entity<Plant>().ToTable("Plant");
             modelBuilder.Entity<PlantLog>().ToTable("PlantLog");
             modelBuilder.Entity<Notification>().ToTable("Notification");
+            
+            // Configure cascade delete behavior for PlantLog
+            modelBuilder.Entity<PlantLog>()
+                .HasOne(p => p.Plant)
+                .WithMany(p => p.PlantLogs)
+                .HasForeignKey(p => p.Plant_ID)
+                .OnDelete(DeleteBehavior.Cascade);
+                
+            // Configure cascade delete behavior for Notification
+            modelBuilder.Entity<Notification>()
+                .HasOne(n => n.Plant)
+                .WithMany(p => p.Notifications)
+                .HasForeignKey(n => n.Plant_ID)
+                .OnDelete(DeleteBehavior.Cascade);
         }
     }
 }

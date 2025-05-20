@@ -8,11 +8,13 @@ namespace PlantHomie.API.Services
 {
     public class JwtService
     {
-        private readonly IConfiguration _config; // IConfiguration til at læse appsettings.json
+        private readonly IConfiguration _config;
+        private readonly IWebHostEnvironment _env;
 
-        public JwtService(IConfiguration config)
+        public JwtService(IConfiguration config, IWebHostEnvironment env)
         {
             _config = config;
+            _env = env;
         }
 
         // Metode til at generere et JWT token baseret på brugerinformation
@@ -23,18 +25,29 @@ namespace PlantHomie.API.Services
 
             var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
-            var claims = new[]
+            var claims = new List<Claim>
             {
                 new Claim(ClaimTypes.NameIdentifier, user.User_ID.ToString()),
                 new Claim(ClaimTypes.Name, user.UserName),
                 new Claim("subscription", user.Subscription)
             };
 
+            // Set issuer and audience based on environment
+            var issuer = _env.IsDevelopment() 
+                ? "http://localhost:5000" 
+                : (_config["Jwt:Issuer"] ?? "PlantHomieAPI");
+                
+            var audience = _env.IsDevelopment() 
+                ? "http://localhost:8080" 
+                : (_config["Jwt:Audience"] ?? "PlantHomieWebApp");
+
+            Console.WriteLine($"Generating token with issuer: {issuer}, audience: {audience}");
+
             var token = new JwtSecurityToken(
-                issuer: _config["Jwt:Issuer"],
-                audience: _config["Jwt:Audience"],
+                issuer: issuer,
+                audience: audience,
                 claims: claims,
-                expires: DateTime.UtcNow.AddYears(20),
+                expires: DateTime.UtcNow.AddDays(30),  // 30 day expiration
                 signingCredentials: credentials
             );
 

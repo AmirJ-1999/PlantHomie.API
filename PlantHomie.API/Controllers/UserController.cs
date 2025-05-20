@@ -9,6 +9,7 @@ using System.Security.Cryptography;
 using System.Text;
 using PlantHomie.API.Services;
 using System.Text.Json;
+using Microsoft.AspNetCore.Cors;
 
 namespace PlantHomie.API.Controllers
 {
@@ -121,6 +122,66 @@ namespace PlantHomie.API.Controllers
             catch (Exception)
             {
                 // Log undtagelsen hvis logning er konfigureret
+                return StatusCode(500, "An error occurred during login. Please try again later.");
+            }
+        }
+
+        // TEST LOGIN ENDPOINT - NO AUTHENTICATION REQUIRED
+        [HttpPost("login-test")]
+        [EnableCors("AllowAll")] // Explicitly enable CORS for this endpoint
+        public async Task<IActionResult> LoginTest([FromBody] UserLoginDto dto)
+        {
+            try
+            {
+                // Log the incoming request
+                Console.WriteLine($"Login-test received for user: {dto?.UserName}");
+                
+                if (dto == null)
+                {
+                    Console.WriteLine("Login data is missing");
+                    return BadRequest("Login data is missing.");
+                }
+
+                if (string.IsNullOrEmpty(dto.UserName) || string.IsNullOrEmpty(dto.Password))
+                {
+                    Console.WriteLine("Username or password missing");
+                    return BadRequest("Username and password are required.");
+                }
+
+                var user = await _ctx.Users
+                                     .FirstOrDefaultAsync(u => u.UserName == dto.UserName);
+
+                if (user is null)
+                {
+                    Console.WriteLine($"User not found: {dto.UserName}");
+                    return Unauthorized("Invalid username or password. Please check your credentials and try again.");
+                }
+
+                if (user.PasswordHash != Hash(dto.Password))
+                {
+                    Console.WriteLine($"Invalid password for user: {dto.UserName}");
+                    return Unauthorized("Invalid username or password. Please check your credentials and try again.");
+                }
+
+                var token = _jwtService.GenerateToken(user);
+                Console.WriteLine($"Login successful for user: {dto.UserName}, generated token");
+                
+                // Allow all origins for CORS in development
+                Response.Headers.Add("Access-Control-Allow-Origin", "*");
+                Response.Headers.Add("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT");
+                Response.Headers.Add("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+                
+                return Ok(new
+                {
+                    token = token,
+                    role = "user",
+                    userId = user.User_ID,
+                    subscription = user.Subscription
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Login error: {ex.Message}");
                 return StatusCode(500, "An error occurred during login. Please try again later.");
             }
         }
@@ -241,6 +302,17 @@ namespace PlantHomie.API.Controllers
                 // Log undtagelsen hvis logning er konfigureret
                 return StatusCode(500, "An error occurred while retrieving the user.");
             }
+        }
+
+        // TEST ENDPOINT
+        [HttpGet("test")]
+        public IActionResult Test()
+        {
+            return Ok(new 
+            { 
+                message = "API is working correctly", 
+                timestamp = DateTime.UtcNow 
+            });
         }
 
         private static string Hash(string text)
