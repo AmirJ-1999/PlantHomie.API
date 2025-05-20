@@ -23,7 +23,7 @@ namespace PlantHomie.API.Controllers
         // GET: api/notification
         [Authorize]
         [HttpGet]
-        public IActionResult GetAll()
+        public IActionResult GetAll([FromQuery] int? plantId = null)
         {
             try
             {
@@ -56,9 +56,18 @@ namespace PlantHomie.API.Controllers
                     return Ok(new[] { sampleNotification });
                 }
 
-                // Brug projektion for at undgå at EF prøver at tilgå Message-feltet
-                var notifications = _context.Notifications
-                    .Where(n => n.User_ID == userId)
+                // Use a query to filter notifications
+                var query = _context.Notifications
+                    .Where(n => n.User_ID == userId);
+                    
+                // Add plant ID filter if provided
+                if (plantId.HasValue)
+                {
+                    query = query.Where(n => n.Plant_ID == plantId.Value);
+                }
+                    
+                // Complete the query with ordering and projection
+                var notifications = query
                     .OrderByDescending(n => n.Dato_Tid)
                     .Select(n => new 
                     {
@@ -66,22 +75,46 @@ namespace PlantHomie.API.Controllers
                         n.Plant_ID,
                         n.User_ID,
                         n.Dato_Tid,
-                        n.Plant_Type,
+                        n.Type,
+                        n.NotificationType,
+                        n.IsRead,
                         Plant = n.Plant
                     })
                     .AsNoTracking()
                     .ToList();
 
+                // Get the actual notifications to use for messages
+                var notificationIds = notifications.Select(n => n.Notification_ID).ToList();
+                var actualNotifications = _context.Notifications
+                    .Include(n => n.Plant)
+                    .Where(n => notificationIds.Contains(n.Notification_ID))
+                    .ToDictionary(n => n.Notification_ID);
+
                 // Format the response with consistent property names and handle null values safely
-                var result = notifications.Select(n => new
+                var result = notifications.Select(n => 
+                {
+                    string message;
+                    if (actualNotifications.TryGetValue(n.Notification_ID, out var actualNotification))
+                    {
+                        message = !string.IsNullOrEmpty(actualNotification.Message)
+                            ? actualNotification.Message
+                            : $"Notification for {n.Plant?.Plant_Name ?? "Unknown Plant"}";
+                    }
+                    else
+                    {
+                        message = $"Notification for {n.Plant?.Plant_Name ?? "Unknown Plant"}";
+                    }
+
+                    return new
                 {
                     notification_ID = n.Notification_ID,
                     plant_ID = n.Plant_ID,
                     user_ID = n.User_ID,
                     dato_Tid = n.Dato_Tid,
-                    type = n.Plant_Type ?? "System",
-                    // Brug en hardcoded besked i stedet for at hente fra databasen
-                    message = $"Notification for {n.Plant?.Plant_Name ?? "Unknown Plant"}",
+                        type = n.Type ?? "System",
+                        message = message,
+                        notificationType = n.NotificationType,
+                        isRead = n.IsRead,
                     plant = n.Plant != null ? new
                     {
                         plant_ID = n.Plant.Plant_ID,
@@ -95,6 +128,7 @@ namespace PlantHomie.API.Controllers
                         plant_type = "Unknown",
                         user_ID = userId
                     }
+                    };
                 }).ToList();
 
                 if (!result.Any())
@@ -119,16 +153,25 @@ namespace PlantHomie.API.Controllers
         {
             try
             {
+                Console.WriteLine($"Received notification data: {JsonSerializer.Serialize(notification)}");
+                
                 if (notification == null)
+                {
+                    Console.WriteLine("Error: Notification object is null");
                     return BadRequest(new { error = "Bad request", message = "Data is missing." });
+                }
 
                 if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int userId))
+                {
+                    Console.WriteLine("Error: Invalid user ID in token");
                     return Unauthorized("Invalid or missing authentication token. Please login first to obtain a valid JWT token and include it in the Authorization header.");
+                }
 
                 // Handle the case where plant doesn't exist yet
                 var plant = _context.Plants.FirstOrDefault(p => p.Plant_ID == notification.Plant_ID);
                 if (plant == null)
                 {
+                    Console.WriteLine($"Plant not found with ID: {notification.Plant_ID}, creating default plant");
                     // If this is a new user without plants, create a default plant
                     plant = new Plant
                     {
@@ -144,20 +187,27 @@ namespace PlantHomie.API.Controllers
                 }
                 else if (plant.User_ID != userId)
                 {
+                    Console.WriteLine($"Authorization error: User {userId} doesn't own plant {notification.Plant_ID}");
                     return Forbid("You do not have permission to create notifications for this plant.");
                 }
 
+                // Set required properties
                 notification.User_ID = userId;
                 notification.Dato_Tid = DateTime.UtcNow;
                 
                 // Ensure the notification has a type
-                if (string.IsNullOrEmpty(notification.Plant_Type))
+                if (string.IsNullOrEmpty(notification.Type))
                 {
-                    notification.Plant_Type = "System";
+                    notification.Type = "System";
                 }
 
+                // Log before saving
+                Console.WriteLine($"Saving notification: Plant_ID={notification.Plant_ID}, User_ID={notification.User_ID}, Type={notification.Type}, Message={notification.Message}");
+                
                 _context.Notifications.Add(notification);
                 _context.SaveChanges();
+                
+                Console.WriteLine($"Notification saved successfully with ID: {notification.Notification_ID}");
 
                 var plant_name = plant?.Plant_Name ?? "Unknown Plant";
                 var plant_type = plant?.Plant_type ?? "Unknown";
@@ -172,9 +222,10 @@ namespace PlantHomie.API.Controllers
                         plant_ID = notification.Plant_ID,
                         user_ID = notification.User_ID,
                         dato_Tid = notification.Dato_Tid,
-                        type = notification.Plant_Type ?? "System",
-                        // Use a hardcoded message instead of accessing from database
-                        message = $"Notification for {plant_name}",
+                        type = notification.Type ?? "System",
+                        message = notification.Message ?? $"Notification for {plant_name}",
+                        notificationType = notification.NotificationType,
+                        isRead = notification.IsRead,
                         plant = plant != null ? new
                         {
                             plant_ID = plant.Plant_ID,
@@ -193,14 +244,22 @@ namespace PlantHomie.API.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { error = "Database error", message = "An error occurred while creating the notification." });
+                Console.WriteLine($"Error creating notification: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                
+                if (ex.InnerException != null) 
+                {
+                    Console.WriteLine($"Inner exception: {ex.InnerException.Message}");
+                }
+                
+                return StatusCode(500, new { error = "Database error", message = $"An error occurred while creating the notification: {ex.Message}" });
             }
         }
 
         // GET: api/notification/latest
         [Authorize]
         [HttpGet("latest")]
-        public IActionResult GetLatest()
+        public IActionResult GetLatest([FromQuery] int? plantId = null)
         {
             try
             {
@@ -233,9 +292,18 @@ namespace PlantHomie.API.Controllers
                     return Ok(sampleNotification);
                 }
 
-                // Brug projektion for at undgå at EF prøver at tilgå Message-feltet
-                var latest = _context.Notifications
-                    .Where(n => n.User_ID == userId)
+                // Build query to filter by user ID and optionally plant ID
+                var query = _context.Notifications
+                    .Where(n => n.User_ID == userId);
+                    
+                // Add plant ID filter if provided
+                if (plantId.HasValue)
+                {
+                    query = query.Where(n => n.Plant_ID == plantId.Value);
+                }
+
+                // Complete query with ordering and projection
+                var latest = query
                     .OrderByDescending(n => n.Dato_Tid)
                     .Select(n => new 
                     {
@@ -243,7 +311,9 @@ namespace PlantHomie.API.Controllers
                         n.Plant_ID,
                         n.User_ID,
                         n.Dato_Tid,
-                        n.Plant_Type,
+                        n.Type,
+                        n.NotificationType,
+                        n.IsRead,
                         Plant = n.Plant
                     })
                     .AsNoTracking()
@@ -271,27 +341,35 @@ namespace PlantHomie.API.Controllers
                 }
 
                 // Format the response with consistent property names
+                // Get the actual notification to use with GetNotificationMessage
+                var actualNotification = _context.Notifications
+                    .Include(n => n.Plant)
+                    .FirstOrDefault(n => n.Notification_ID == latest.Notification_ID);
+                
+                var message = !string.IsNullOrEmpty(actualNotification?.Message) 
+                    ? actualNotification.Message 
+                    : $"Notification for {latest.Plant?.Plant_Name ?? "Unknown Plant"}";
+                
                 var result = new
                 {
                     notification_ID = latest.Notification_ID,
                     plant_ID = latest.Plant_ID,
                     user_ID = latest.User_ID,
                     dato_Tid = latest.Dato_Tid,
-                    type = latest.Plant_Type ?? "System",
-                    // Use a hardcoded message instead of accessing from database
-                    message = $"Notification for {latest.Plant?.Plant_Name ?? "your plant"}",
+                    type = latest.Type ?? "System",
+                    message = message,
+                    notificationType = latest.NotificationType,
+                    isRead = latest.IsRead,
                     plant = latest.Plant != null ? new
                     {
                         plant_ID = latest.Plant.Plant_ID,
-                        plant_Name = latest.Plant.Plant_Name ?? "Unknown Plant",
-                        plant_type = latest.Plant.Plant_type ?? "Unknown",
-                        user_ID = latest.Plant.User_ID
+                        plant_Name = latest.Plant.Plant_Name ?? "your plant",
+                        plant_type = latest.Plant.Plant_type ?? "Unknown"
                     } : new
                     {
                         plant_ID = 0,
                         plant_Name = "Unknown Plant",
-                        plant_type = "Unknown",
-                        user_ID = userId
+                        plant_type = "Unknown"
                     }
                 };
 
@@ -301,6 +379,100 @@ namespace PlantHomie.API.Controllers
             {
                 return StatusCode(500, new { error = "Database error", message = "An error occurred while retrieving the latest notification." });
             }
+        }
+
+        // GET: api/notification/unread-count
+        [Authorize]
+        [HttpGet("unread-count")]
+        public async Task<IActionResult> GetUnreadCount()
+        {
+            try
+            {
+                if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int userId))
+                    return Unauthorized("Invalid or missing authentication token.");
+
+                // Count unread notifications for the user
+                var count = await _context.Notifications
+                    .Where(n => n.User_ID == userId && !n.IsRead)
+                    .CountAsync();
+                    
+                return Ok(new { count });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = "Database error", message = "An error occurred while counting unread notifications." });
+            }
+        }
+
+        // PUT: api/notification/mark-read/{id}
+        [Authorize]
+        [HttpPut("mark-read/{id}")]
+        public async Task<IActionResult> MarkAsRead(int id)
+        {
+            try
+            {
+                if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int userId))
+                    return Unauthorized("Invalid or missing authentication token.");
+
+                var notification = await _context.Notifications
+                    .FirstOrDefaultAsync(n => n.Notification_ID == id && n.User_ID == userId);
+                    
+                if (notification == null)
+                    return NotFound("Notification not found or does not belong to the current user.");
+                    
+                notification.IsRead = true;
+                await _context.SaveChangesAsync();
+                
+                return Ok(new { message = "Notification marked as read" });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = "Database error", message = "An error occurred while updating the notification." });
+            }
+        }
+
+        // PUT: api/notification/mark-all-read
+        [Authorize]
+        [HttpPut("mark-all-read")]
+        public async Task<IActionResult> MarkAllAsRead()
+        {
+            try
+            {
+                if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int userId))
+                    return Unauthorized("Invalid or missing authentication token.");
+
+                var unreadNotifications = await _context.Notifications
+                    .Where(n => n.User_ID == userId && !n.IsRead)
+                    .ToListAsync();
+                    
+                if (unreadNotifications.Any())
+                {
+                    foreach (var notification in unreadNotifications)
+                    {
+                        notification.IsRead = true;
+                    }
+                    
+                    await _context.SaveChangesAsync();
+                }
+                
+                return Ok(new { message = $"Marked {unreadNotifications.Count} notifications as read" });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = "Database error", message = "An error occurred while updating notifications." });
+            }
+        }
+
+        private string GetNotificationMessage(Notification notification)
+        {
+            // Return the actual message if available
+            if (!string.IsNullOrEmpty(notification.Message))
+            {
+                return notification.Message;
+            }
+            
+            // Fallback to a default message
+            return $"Notification for {notification.Plant?.Plant_Name ?? "Unknown Plant"}";
         }
     }
 }
