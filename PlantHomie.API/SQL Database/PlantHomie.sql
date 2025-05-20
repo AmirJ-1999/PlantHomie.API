@@ -1,4 +1,4 @@
--- PlantHomieNEW.sql - Complete Database Setup Script
+-- PlantHomie.sql - Database Setup Script
 -- This script will create a new PlantHomie database from scratch
 
 -- Create a new database (uncomment if you want to create a new database)
@@ -120,10 +120,3 @@ VALUES (DATEADD(hour, -1, GETUTCDATE()), 'Succulent', 3, 2, 'Your Aloe Vera need
 
 PRINT 'PlantHomie database has been successfully created and populated with sample data.';
 GO
-
--- HOW TO USE THIS SCRIPT:
--- 1. Open SQL Server Management Studio
--- 2. Connect to your database server
--- 3. If you want to create a new database, uncomment the CREATE DATABASE line at the top
--- 4. Execute the entire script
--- 5. The database will be created with all tables and sample data
