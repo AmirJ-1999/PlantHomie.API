@@ -362,3 +362,4 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 PlantHomie.API/SQL Database/PlantHomieNEW.sql
+/PlantHomie.API
