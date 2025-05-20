@@ -5,3 +5,6 @@ To use the swagger, the user needs to login or signup as a user, which the perso
 
 When you login or signup you will get an token where you then have to click the authorize button where you will then input "Bearer (yourtoken)" and then authorize. Now you will be able to POST and GET
 APIs models from the swagger tied to the user.
+
+A reminder that the backend + sql is running on the azure with limited vcores, so the backend may be a bit slow on startup, which will prevent the frontend
+from getting an response, after 20 seconds.
